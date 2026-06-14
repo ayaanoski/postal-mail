@@ -1,0 +1,160 @@
+{
+  "coupling_issues": [
+    {
+      "type": "tight_coupling_to_specific_implementations",
+      "description": "Modules directly depending on specific implementations rather than abstractions",
+      "locations": [
+        {
+          "component": "server.js",
+          "coupling": "Direct instantiation of PostfixLogParser with hard-coded container name",
+          "code": "const { getParser } = require('./utils/postfixLogParser');\n// ...\nconst parser = getParser();",
+          "impact": "Cannot easily substitute different log parser or mock for testing",
+          "severity": "medium"
+        },
+        {
+          "component": "server.js",
+          "coupling": "Direct use of BullMQ QueueEvents",
+          "code": "const { QueueEvents } = require('bullmq');\n// ...\nconst queueEvents = new QueueEvents('emailSendingQueue', { connection });",
+          "impact": "Tightly coupled to BullMQ implementation; switching queue systems would require changes",
+          "severity": "medium"
+        },
+        {
+          "component": "postfixLogParser.js",
+          "coupling": "Direct instantiation of child_process and direct MongoDB model usage",
+          "code": "const { spawn } = require('child_process');\n// ...\nthis.process = spawn('docker', [...]);\n// ...\nconst doc = await DeliveryEvent.create({ ... });",
+          "impact": "Parser is tightly coupled to Docker, specific container name, and DeliveryEvent model",
+          "severity": "high"
+        },
+        {
+          "component": "RelayPool.js",
+          "coupling": "Direct instantiation of nodemailer transports with hard-coded provider logic",
+          "code": "this.transports = [ nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass }, pool: true, maxConnections: 5, maxMessages: 100 }) ];",
+          "impact": "Tightly coupled to nodemailer and specific provider logic (Brevo/AWS SES)",
+          "severity": "medium"
+        },
+        {
+          "component": "authController.js",
+          "coupling": "Direct use of jsonwebtoken and bcryptjs libraries",
+          "code": "const jwt = require('jsonwebtoken');\nconst bcrypt = require('bcryptjs');\n// ...\nreturn jwt.sign( ... );\n// ...\nthis.password = await bcrypt.hash(this.password, 12);",
+          "impact": "Tightly coupled to specific JWT and bcrypt implementations",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "type": "tight_coupling_through_global_state",
+      "description": "Modules coupled through shared global state or singletons",
+      "locations": [
+        {
+          "component": "WarmupConfig model",
+          "coupling": "Singleton pattern using hard-coded 'global' singleton field",
+          "code": "singleton: { type: String, default: 'global', unique: true }",
+          "impact": "All warmup functionality tightly coupled to single global instance",
+          "severity": "medium"
+        },
+        {
+          "component": "PostfixLogParser",
+          "coupling": "Singleton pattern via getParser() function",
+          "code": "let parserInstance = null;\nconst getParser = () => { if (!parserInstance) { parserInstance = new PostfixLogParser(); } return parserInstance; };",
+          "impact": "Tight coupling to single parser instance makes testing difficult",
+          "severity": "medium"
+        },
+        {
+          "component": "RelayPool",
+          "coupling": "Singleton instance exported directly",
+          "code": "module.exports = new RelayPool();",
+          "impact": "Tight coupling to single relay pool instance",
+          "severity": "low"
+        },
+        {
+          "component": "./utils/api.js",
+          "coupling": "Global logout callback variable",
+          "code": "let globalLogoutCallback = null;\n// ...\nexport const setLogoutCallback = (callback) => { globalLogoutCallback = callback; };",
+          "impact": "Tight coupling through global state for logout handling",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "type": "tight_coupling_through_inheritance",
+      "description": "Inappropriate use of inheritance leading to tight coupling",
+      "locations": [
+        {
+          "component": "Mongoose models",
+          "coupling": "All models directly extend mongoose.Schema and inherit Mongoose-specific methods",
+          "code": "const userSchema = new mongoose.Schema({ ... });\n// ...\nmodule.exports = mongoose.model('User', userSchema);",
+          "impact": "Models are tightly coupled to Mongoose ODM; switching ORM would require complete rewrite",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "type": "tight_coupling_through_parameter_lists",
+      "description": "Functions with long parameter lists indicating tight coupling",
+      "locations": [
+        {
+          "component": "postfixLogParser.js",
+          "coupling": "_buildEvent method extracts many fields from regex match",
+          "code": "_buildEvent(match) {\n  const [, timestamp, component, pid, queueId, recipient, relay, delay, dsn, status, diagnostic] = match;\n  // ...\n  const event = {\n    id: `${queueId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,\n    timestamp: isoTimestamp,\n    // ... 10+ fields\n  };\n  // ...\n}",
+          "impact": "Method is tightly coupled to the specific regex match structure",
+          "severity": "low"
+        },
+        {
+          "component": "campaignController.js",
+          "coupling": "launchCampaign function accesses many nested properties from request and campaign objects",
+          "code": "const domain = chooseDomain(\n  campaign.senderRotationMode,\n  domains,\n  roundRobinState\n);\n// ...\nreturn {\n  name: 'send-email',\n  data: {\n    campaignId: campaign._id.toString(),\n    recipientId: recipient._id.toString(),\n    // ... many nested properties\n  }\n};",
+          "impact": "Function is tightly coupled to the specific structure of campaign and domain objects",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "type": "tight_coupling_through_exception_handling",
+      "description": "Modules coupled through specific exception types or error handling",
+      "locations": [
+        {
+          "component": "Throughout codebase",
+          "coupling": "Direct checking for specific error codes like 11000 (duplicate key)",
+          "code": "if (error.code === 11000) { return res.status(409).json({ message: 'Duplicate key error' }); }",
+          "impact": "Coupled to MongoDB-specific error codes",
+          "severity": "low"
+        },
+        {
+          "component": "authController.js",
+          "coupling": "Checking for specific JWT error names",
+          "code": "if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') { ... }",
+          "impact": "Coupled to specific jsonwebtoken error types",
+          "severity": "very_low"
+        }
+      ]
+    },
+    {
+      "type": "lack_of_dependency_injection",
+      "description": "Missing dependency injection patterns that would reduce coupling",
+      "locations": [
+        {
+          "component": "All controllers",
+          "coupling": "Direct require() of models and services",
+          "code": "const Campaign = require('../models/Campaign');\nconst Domain = require('../models/Domain');",
+          "impact": "Controllers cannot easily use mocks or alternative implementations",
+          "severity": "medium"
+        },
+        {
+          "component": "All services/utils",
+          "coupling": "Direct require() of dependencies",
+          "code": "const { Resolver } = require('dns/promises');\nconst crypto = require('crypto');",
+          "impact": "Utilities cannot easily use mocks or alternative implementations",
+          "severity": "medium"
+        },
+        {
+          "component": "PostfixLogParser",
+          "coupling": "Hard-coded dependencies on specific libraries and models",
+          "code": "const { spawn } = require('child_process');\nconst EventEmitter = require('events');\nconst DeliveryEvent = require('../models/DeliveryEvent');",
+          "impact": "Parser cannot be easily tested with mocks or used in different environments",
+          "severity": "high"
+        }
+      ]
+    }
+  ],
+  "summary": "The codebase shows significant coupling issues, particularly tight coupling to specific implementations (Docker, BullMQ, nodemailer, Mongoose), use of singleton patterns creating global state coupling, and lack of dependency injection making testing and flexibility difficult. These issues increase the rigidity of the system and make it harder to change implementations or test components in isolation."
+}

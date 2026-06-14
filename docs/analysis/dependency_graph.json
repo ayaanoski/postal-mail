@@ -1,0 +1,408 @@
+{
+  "backend": {
+    "controllers": {
+      "authController.js": {
+        "internalDependencies": [
+          "../models/User",
+          "../models/Campaign"
+        ],
+        "externalDependencies": [
+          "jsonwebtoken",
+          "bcryptjs"
+        ],
+        "description": "Handles user authentication, registration, login, approval, and employee management"
+      },
+      "campaignController.js": {
+        "internalDependencies": [
+          "../models/Campaign",
+          "../models/Domain",
+          "../config/queue"
+        ],
+        "externalDependencies": [],
+        "description": "Manages campaign creation, retrieval, launching, and deletion with tracking link injection and domain rotation logic"
+      },
+      "domainController.js": {
+        "internalDependencies": [
+          "../models/Domain",
+          "../models/User",
+          "../utils/dnsVerifier",
+          "../utils/crypto"
+        ],
+        "externalDependencies": [],
+        "description": "Handles domain management including verification, DKIM generation, test sending, and importing from external providers"
+      },
+      "eventController.js": {
+        "internalDependencies": [
+          "../utils/postfixLogParser",
+          "../models/Tracking",
+          "../models/DeliveryEvent"
+        ],
+        "externalDependencies": [
+          "child_process"
+        ],
+        "description": "Provides Server-Sent Events (SSE) endpoint for real-time delivery events and mail queue management"
+      },
+      "monitoringController.js": {
+        "internalDependencies": [
+          "../models/DmarcReport"
+        ],
+        "externalDependencies": [],
+        "description": "Handles DMARC report retrieval and summary"
+      },
+      "seedRecipientController.js": {
+        "internalDependencies": [
+          "../models/SeedRecipient"
+        ],
+        "externalDependencies": [],
+        "description": "Manages seed recipients for email warmup acceleration"
+      },
+      "smtpConfigController.js": {
+        "internalDependencies": [
+          "../models/SmtpConfig",
+          "../utils/crypto"
+        ],
+        "externalDependencies": [
+          "nodemailer"
+        ],
+        "description": "Handles SMTP configuration management including creation, retrieval, updating, deletion, and testing"
+      },
+      "statsController.js": {
+        "internalDependencies": [
+          "../models/Campaign",
+          "../models/Tracking",
+          "../models/DeliveryEvent"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "Provides campaign statistics and overview analytics"
+      },
+      "warmupController.js": {
+        "internalDependencies": [
+          "../models/WarmupConfig"
+        ],
+        "externalDependencies": [],
+        "description": "Manages email warmup schedule and rate limiting"
+      }
+    },
+    "models": {
+      "User.js": {
+        "internalDependencies": [
+          "bcryptjs",
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "bcryptjs",
+          "mongoose"
+        ],
+        "description": "User model with bcrypt password hashing, role-based access control, and approval workflow"
+      },
+      "Campaign.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "Campaign model with recipient schema, delay settings, attachments, and domain references"
+      },
+      "Domain.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "Domain model with sender email validation, DNS verification fields, and usage tracking"
+      },
+      "DeliveryEvent.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "Delivery event model for tracking email delivery status from Postfix logs"
+      },
+      "DmarcReport.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "DMARC report model for email authentication monitoring"
+      },
+      "SeedRecipient.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "Seed recipient model for warmup acceleration tracking"
+      },
+      "SmtpConfig.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "SMTP configuration model with encrypted password fields (AES-256-GCM)"
+      },
+      "Tracking.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "Tracking model for email opens, clicks, and unsubscribes with TTL index"
+      },
+      "WarmupConfig.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "Singleton warmup configuration model with phased daily limits and slot reservation system"
+      }
+    },
+    "utils": {
+      "crypto.js": {
+        "internalDependencies": [
+          "crypto"
+        ],
+        "externalDependencies": [
+          "crypto"
+        ],
+        "description": "AES-256-GCM encryption/decryption utilities for SMTP passwords"
+      },
+      "dnsVerifier.js": {
+        "internalDependencies": [
+          "crypto",
+          "dns/promises"
+        ],
+        "externalDependencies": [
+          "crypto"
+        ],
+        "description": "DNS verification utilities for MX, SPF, DKIM, and DMARC records"
+      },
+      "emailVerifier.js": {
+        "internalDependencies": [
+          "dns/promises"
+        ],
+        "externalDependencies": [
+          "dns/promises"
+        ],
+        "description": "Email validation utilities including MX record checking and bounce categorization"
+      },
+      "postfixLogParser.js": {
+        "internalDependencies": [
+          "../models/DeliveryEvent",
+          "child_process",
+          "events"
+        ],
+        "externalDependencies": [
+          "child_process",
+          "events"
+        ],
+        "description": "Parses Postfix container logs for delivery events and maintains real-time event stream via SSE"
+      }
+    },
+    "config": {
+      "db.js": {
+        "internalDependencies": [
+          "mongoose"
+        ],
+        "externalDependencies": [
+          "mongoose"
+        ],
+        "description": "MongoDB connection utility"
+      },
+      "queue.js": {
+        "internalDependencies": [
+          "bullmq"
+        ],
+        "externalDependencies": [
+          "bullmq"
+        ],
+        "description": "BullMQ queue configuration for email sending jobs"
+      },
+      "relays.js": {
+        "internalDependencies": [
+          "nodemailer"
+        ],
+        "externalDependencies": [
+          "nodemailer"
+        ],
+        "description": "Relay pool for global SMTP configurations (Brevo/AWS SES)"
+      }
+    },
+    "routes": {
+      "api.js": {
+        "internalDependencies": [
+          "../controllers/authController",
+          "../controllers/domainController",
+          "../controllers/seedRecipientController",
+          "../controllers/smtpConfigController",
+          "../controllers/warmupController",
+          "../controllers/campaignController",
+          "../controllers/statsController",
+          "../controllers/eventController",
+          "../controllers/monitoringController",
+          "../config/relays",
+          "../utils/emailVerifier"
+        ],
+        "externalDependencies": [
+          "express"
+        ],
+        "description": "Main API route aggregator mounting all controller endpoints with protection middleware"
+      },
+      "tracking.js": {
+        "internalDependencies": [
+          "../models/Tracking"
+        ],
+        "externalDependencies": [
+          "express",
+          "mongoose"
+        ],
+        "description": "Tracking routes for email open, click, and unsubscribe events with transparent GIF pixel"
+      }
+    },
+    "server.js": {
+      "internalDependencies": [
+        "dotenv",
+        "cors",
+        "express",
+        "mongoose",
+        "./config/db",
+        "./config/queue",
+        "./routes/tracking",
+        "./routes/api",
+        "./utils/postfixLogParser",
+        "./utils/emailVerifier"
+      ],
+      "externalDependencies": [
+        "dotenv",
+        "cors",
+        "express",
+        "mongoose",
+        "bullmq"
+      ],
+      "description": "Express server setup with middleware, routes, Postfix log parser integration, and graceful shutdown"
+    }
+  },
+  "frontend": {
+    "components": {
+      "App.jsx": {
+        "internalDependencies": [
+          "./components/Sidebar",
+          "./components/DashboardView",
+          "./components/DomainsView",
+          "./components/DomainDetailView",
+          "./components/ComposeView",
+          "./components/EventsView",
+          "./components/CampaignDetailView",
+          "./components/SeedsView",
+          "./components/EmployeeView",
+          "./components/EmployeeDetailView",
+          "./components/RulesView",
+          "./components/SettingsView",
+          "./utils/api"
+        ],
+        "externalDependencies": [
+          "react",
+          "react-router-dom"
+        ],
+        "description": "Main React application component handling authentication, routing, and state management"
+      },
+      "ComposeView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Campaign creation UI with recipient parsing, domain selection, delay settings, attachments handling, and rich text editor"
+      },
+      "CampaignDetailView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Detailed view of a campaign with statistics, delivery events, and performance metrics"
+      },
+      "DomainsView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Domain management UI with list view, bulk import functionality, verification, and DKIM generation"
+      },
+      "DomainDetailView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Detailed view of a domain with DNS records, verification status, test delivery, and usage statistics"
+      },
+      "EventsView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Real-time delivery event monitoring via Server-Sent Events (SSE) with filtering and auto-scroll"
+      },
+      "SeedsView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Seed recipient management for warmup acceleration with bulk import and toggle/delete functionality"
+      },
+      "EmployeeView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Employee management with pending approvals tab and active employees tab"
+      },
+      "EmployeeDetailView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Employee profile showing campaigns and statistics"
+      },
+      "RulesView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Email deliverability rules and tips in English and Bengali"
+      },
+      "SettingsView.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "SMTP configuration management form with testing and provider presets"
+      },
+      "Sidebar.jsx": {
+        "internalDependencies": [],
+        "externalDependencies": [
+          "react"
+        ],
+        "description": "Navigation sidebar with main menu, preferences, admin employee management, and user info/logout"
+      }
+    },
+    "utils": {
+      "api.js": {
+        "internalDependencies": [],
+        "externalDependencies": [],
+        "description": "API fetch wrapper with token integration and automatic logout handler"
+      }
+    }
+  }
+}

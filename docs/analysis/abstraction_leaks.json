@@ -1,0 +1,114 @@
+{
+  "abstraction_leaks": [
+    {
+      "type": "database_specific_code_in_controllers",
+      "description": "Controllers exposing database-specific concepts and implementation details",
+      "locations": [
+        {
+          "component": "statsController.js",
+          "leak": "Direct use of MongoDB aggregation pipelines",
+          "code": "Tracking.aggregate([{ $match: { ...trackingFilter, type: 'open' } }, { $group: { _id: { campaignId: '$campaignId', recipientId: '$recipientId' } } }, { $group: { _id: '$_id.campaignId', count: { $sum: 1 } } }])",
+          "impact": "Controllers must know about MongoDB aggregation syntax and cannot easily switch databases",
+          "severity": "medium"
+        },
+        {
+          "component": "statsController.js",
+          "leak": "Direct use of distinct() and countDocuments() methods",
+          "code": "Tracking.distinct('recipientId', { campaignId, type: 'open' }); Tracking.countDocuments({ campaignId, type: 'open' });",
+          "impact": "Business logic depends on specific MongoDB query methods",
+          "severity": "low"
+        },
+        {
+          "component": "domainController.js",
+          "leak": "Direct use of Mongoose validation and ObjectId casting",
+          "code": "Domain.findOne({ _id: id, userId: req.user.id }); // and similar",
+          "impact": "Controllers tightly coupled to Mongoose ODM",
+          "severity": "low"
+        },
+        {
+          "component": "WarmupConfig.js",
+          "leak": "Static methods exposing database-specific findOne and save operations",
+          "code": "reserveSlot: async function () { const config = await this.findOne({ singleton: 'global' }); ... await config.save(); }",
+          "impact": "Service layer would need to know about persistence implementation",
+          "severity": "low"
+        }
+      ],
+      "type": "service_specific_details_in_apis",
+      "description": "APIs exposing implementation details of underlying services",
+      "locations": [
+        {
+          "component": "routes/api.js",
+          "leak": "BullMQ-specific job configuration exposed through API behavior",
+          "code": "emailSendingQueue.addBulk(jobs); // with specific opts structure",
+          "impact": "Clients may depend on specific job queue implementation details",
+          "severity": "low"
+        },
+        {
+          "component": "eventController.js",
+          "leak": "Postfix-specific event structure exposed through SSE",
+          "code": "parser.injectEvent({ status: 'sent', recipient: jobRecipient.email, domain: sendingDomain.domainName, ... });",
+          "impact": "Frontend couples to Postfix-specific event fields",
+          "severity": "very_low"
+        },
+        {
+          "component": "routes/tracking.js",
+          "leak": "Exposing MongoDB-specific _id field in responses",
+          "code": "res.json({ message: 'Tracking event deleted successfully', id }); // where id is MongoDB _id",
+          "impact": "Frontend couples to MongoDB ObjectId representation",
+          "severity": "very_low"
+        }
+      ],
+      "type": "implementation_details_in_interfaces",
+      "description": "Abstractions leaking implementation details through their interfaces",
+      "locations": [
+        {
+          "component": "PostfixLogParser",
+          "leak": "Exposing internal buffer and stats through getter methods",
+          "code": "getBuffer() { return [...this.buffer]; } getStats() { return { ...this.stats }; }",
+          "impact": "Consumers depend on internal data structures rather than logical events",
+          "severity": "low"
+        },
+        {
+          "component": "WarmupConfig model",
+          "leak": "Exposing internal PHASES constant through getPhaseLabel method",
+          "code": "getPhaseLabel() { if (!this.enabled) return 'Manual'; return this.getPhase().label; } // where getPhase() returns element from PHASES",
+          "impact": "Consumers know about the phase label structure",
+          "severity": "very_low"
+        },
+        {
+          "component": "RelayPool",
+          "leak": "Exposing internal transports array through size getter",
+          "code": "get size() { return this.transports.length; }",
+          "impact": "Consumers know about internal pool implementation",
+          "severity": "very_low"
+        }
+      ],
+      "type": "configuration_leaks",
+      "description": "Configuration details leaking into inappropriate layers",
+      "locations": [
+        {
+          "component": "server.js",
+          "leak": "Hard-coded Docker container name in postfix log parser",
+          "code": "this.containerName = options.containerName || 'mailer-postfix-relay';",
+          "impact": "Tightly coupled to specific deployment infrastructure",
+          "severity": "medium"
+        },
+        {
+          "component": "postfixLogParser.js",
+          "leak": "Hard-coded DNS servers in email verifier",
+          "code": "resolver.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);",
+          "impact": "Tightly coupled to specific DNS providers",
+          "severity": "low"
+        },
+        {
+          "component": "dnsVerifier.js",
+          "leak": "Hard-coded common DKIM selectors",
+          "code": "const COMMON_DKIM_SELECTORS = ['default', 'google', 's1', 's2', 'k1', ...];",
+          "impact": "Tightly coupled to specific selector preferences",
+          "severity": "very_low"
+        }
+      ],
+      "summary": "Abstraction leaks are relatively mild in this codebase, with most occurring in database-specific code in controllers and configuration details in utilities. The core business logic is reasonably well encapsulated, but there are opportunities to improve abstraction boundaries."
+    }
+  ]
+}

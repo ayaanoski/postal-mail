@@ -1,0 +1,16 @@
+services:
+  mail-relay:
+    build:
+      context: ./docker/postfix
+      dockerfile: Dockerfile
+    container_name: mailer-postfix-relay
+    ports:
+      - "127.0.0.1:2525:25"
+    environment:
+      - HOSTNAME=${VPS_HOSTNAME:-mail.yourvps.com}
+    restart: unless-stopped
+    volumes:
+      - postfix-spool:/var/spool/postfix
+
+volumes:
+  postfix-spool:

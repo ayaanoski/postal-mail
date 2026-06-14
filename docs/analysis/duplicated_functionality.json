@@ -1,0 +1,119 @@
+{
+  "duplicated_functionality": [
+    {
+      "type": "error_handling_pattern",
+      "description": "Identical try/catch blocks with same error response formatting across all controllers",
+      "locations": [
+        "authController.js: register, login, getMe, getPendingUsers, approveUser, rejectUser, getEmployees, getEmployeeById, getEmployeeCampaigns, deleteUser",
+        "campaignController.js: createCampaign, getCampaigns, launchCampaign, deleteCampaign",
+        "domainController.js: all methods",
+        "smtpConfigController.js: all methods",
+        "statsController.js: all methods",
+        "eventController.js: clearAllEvents, deleteEvent",
+        "warmupController.js: all methods",
+        "seedRecipientController.js: all methods",
+        "monitoringController.js: all methods"
+      ],
+      "duplicated_code": "try { ... } catch (error) { return res.status(500).json({ message: 'Unable to [action]', error: error.message }); }",
+      "suggested_refactor": "Create a wrapper function or middleware for standardized error handling",
+      "severity": "medium"
+    },
+    {
+      "type": "validation_logic",
+      "description": "Repeated validation checks for required fields and email format",
+      "locations": [
+        "authController.js: register, login",
+        "campaignController.js: createCampaign",
+        "domainController.js: addDomain, updateDomain",
+        "smtpConfigController.js: createSmtpConfig, updateSmtpConfig, testSmtpConnection",
+        "seedRecipientController.js: addSeed, bulkImportSeeds",
+        "routes/api.js: /validate-emails endpoint",
+        "utils/emailVerifier.js: validateEmail, validateAndCheckMx functions"
+      ],
+      "duplicated_code": "if (!field || !field.includes('@')) { return res.status(400).json({ message: 'Valid email is required' }); }",
+      "suggested_refactor": "Create centralized validation utility with reusable validation functions",
+      "severity": "high"
+    },
+    {
+      "type": "response_formatting",
+      "description": "Consistent success/error response formatting across endpoints",
+      "locations": [
+        "All controller methods",
+        "All route handlers"
+      ],
+      "duplicated_code": "return res.json({ message: '[success message]', [data]: [data] });\nreturn res.status(400/500).json({ message: '[error message]', error: error.message });",
+      "suggested_refactor": "Create response helper functions (successResponse, errorResponse)",
+      "severity": "low"
+    },
+    {
+      "type": "authorization_middleware",
+      "description": "Repeated use of protect and adminOnly middleware",
+      "locations": [
+        "routes/api.js: nearly all routes",
+        "app.js: implicit through protect middleware"
+      ],
+      "duplicated_code": "router.get('/endpoint', protect, adminOnly, handler);",
+      "suggested_refactor": "Create role-based route grouping or wrapper functions",
+      "severity": "low"
+    },
+    {
+      "type": "jwt_token_extraction",
+      "description": "Identical JWT token extraction logic in multiple places",
+      "locations": [
+        "authController.protect",
+        "Auth.jsx handleLoginSubmit/handleRegisterSubmit (indirect via apiFetch)"
+      ],
+      "duplicated_code": "const authorization = req.headers.authorization || '';\nlet token = '';\nif (authorization.startsWith('Bearer ')) {\n  token = authorization.slice('Bearer '.length);\n} else if (req.query && req.query.token) {\n  token = req.query.token;\n}",
+      "suggested_refactor": "Extract token extraction to reusable utility function",
+      "severity": "medium"
+    },
+    {
+      "type": "date_formatting",
+      "description": "Repeated ISO date string slicing for YYYY-MM-DD format",
+      "locations": [
+        "Domain.js: usageDate default",
+        "WarmupConfig.js: lastResetDate handling",
+        "postfixLogParser.js: _buildEvent timestamp processing",
+        "eventController.js: various places"
+      ],
+      "duplicated_code": "new Date().toISOString().slice(0, 10)",
+      "suggested_refactor": "Create date formatting utility function",
+      "severity": "low"
+    },
+    {
+      "type": "object_id_validation",
+      "description": "Repeated MongoDB ObjectId validation",
+      "locations": [
+        "statsController.js: getCampaignStats, deleteTrackingEvent",
+        "routes/tracking.js: all handlers",
+        "server.js: bounce repair logic"
+      ],
+      "duplicated_code": "if (!mongoose.Types.ObjectId.isValid(id)) { return res.status(400).json({ message: 'Invalid [ID] format' }); }",
+      "suggested_refactor": "Create validation middleware or utility function",
+      "severity": "medium"
+    },
+    {
+      "type": "password_encryption_decryption",
+      "description": "Repeated encryption/decryption patterns for SMTP passwords",
+      "locations": [
+        "smtpConfigController.js: createSmtpConfig, updateSmtpConfig, testSmtpConnection",
+        "utils/crypto.js: encryptSmtpPassword, decryptSmtpPassword functions"
+      ],
+      "duplicated_code": "const { encrypted, iv, tag } = encryptSmtpPassword(smtpPass);\n// and\nconst plainPass = decryptSmtpPassword(encrypted, iv, tag);",
+      "suggested_refactor": "Already well-encapsulated in crypto.js, but usage is consistent - good practice",
+      "severity": "info"
+    },
+    {
+      "type": "bullmq_job_creation",
+      "description": "Similar job creation patterns for email sending",
+      "locations": [
+        "campaignController.js: launchCampaign (job creation)",
+        "Worker implementation (implied in server.js queue event listeners)"
+      ],
+      "duplicated_code": "Jobs with name: 'send-email', data containing campaignId, recipientId, userId, recipient, subject, htmlContent, sendingDomain, delaySettings, attachments",
+      "suggested_refactor": "Create job factory function for consistency",
+      "severity": "low"
+    }
+  ],
+  "summary": "The codebase shows moderate levels of duplicated functionality, primarily in error handling, validation, and response formatting. These represent good opportunities for refactoring to improve maintainability and reduce bugs."
+}

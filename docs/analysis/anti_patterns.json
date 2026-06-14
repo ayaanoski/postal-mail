@@ -1,0 +1,253 @@
+{
+  "anti_patterns": [
+    {
+      "type": "god_object",
+      "description": "Controllers and models that handle too many responsibilities",
+      "locations": [
+        {
+          "component": "domainController.js",
+          "issues": [
+            "Handles domain CRUD operations",
+            "Handles domain verification (DNS checks)",
+            "Handles DKIM key generation",
+            "Handles test email sending",
+            "Handles importing domains from 3 external providers (Brevo, SparkPost, VPS)",
+            "Handles domain deletion"
+          ],
+          "severity": "high",
+          "suggested_refactor": "Split into domain service, verification service, import service, and keep controller thin"
+        },
+        {
+          "component": "campaignController.js",
+          "issues": [
+            "Handles campaign CRUD operations",
+            "Handles campaign launching with complex domain rotation logic",
+            "Handles recipient parsing and validation",
+            "Handles tracking link injection and wrapping",
+            "Handles campaign deletion with related data cleanup"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Extract campaign launching logic to campaign service, recipient parsing to utility"
+        },
+        {
+          "component": "statsController.js",
+          "issues": [
+            "Handles campaign statistics aggregation",
+            "Handles overview statistics aggregation",
+            "Handles tracking event deletion",
+            "Performs complex MongoDB aggregation pipelines directly in controller"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Extract aggregation logic to analytics service or model methods"
+        },
+        {
+          "component": "App.jsx",
+          "issues": [
+            "Handles authentication state",
+            "Handles routing logic",
+            "Handles data loading for dashboard",
+            "Handles form submissions for login/register",
+            "Handles toast notifications",
+            "Handles sidebar state",
+            "Handles OAuth callbacks",
+            "Renders all views through routing"
+          ],
+          "severity": "high",
+          "suggested_refactor": "Split into auth context, layout components, and use route-based code splitting"
+        }
+      ]
+    },
+    {
+      "type": "long_method",
+      "description": "Functions that are too long and handle multiple responsibilities",
+      "locations": [
+        {
+          "component": "postfixLogParser.js",
+          "method": "_buildEvent",
+          "lines": "66-115 (approx 50 lines)",
+          "issues": [
+            "Parses log lines",
+            "Builds event objects",
+            "Looks up correlated message IDs",
+            "Manages queueIdToMessageId map",
+            "Handles final status cleanup"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Split into parseLine, buildEventFromMatch, updateMessageIdMap, cleanupExpiredMappings"
+        },
+        {
+          "component": "campaignController.js",
+          "method": "launchCampaign",
+          "lines": "145-308 (approx 160 lines)",
+          "issues": [
+            "Finds campaign and validates ownership",
+            "Checks campaign status",
+            "Finds active domains",
+            "Maps domains by ID",
+            "Filters pending recipients",
+            "Sets up round-robin state",
+            "Processes attachments",
+            "Creates job array for each recipient",
+            "Updates campaign status and round-robin index",
+            "Adds jobs to queue",
+            "Has complex rollback logic in catch block"
+          ],
+          "severity": "high",
+          "suggested_refactor": "Extract domain selection, job creation, campaign update, and error rollback to separate functions"
+        },
+        {
+          "component": "domainController.js",
+          "method": "addDomain",
+          "lines": "44-94 (approx 50 lines)",
+          "issues": [
+            "Validates input",
+            "Checks for existing domain",
+            "Creates domain document",
+            "Generates DKIM keys if needed",
+            "Builds DNS records",
+            "Returns response"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Extract DKIM generation and DNS record building to domain service"
+        },
+        {
+          "component": "server.js",
+          "method": "startServer (anonymous function)",
+          "lines": "53-151 (approx 100 lines)",
+          "issues": [
+            "Connects to database",
+            "Runs bounce repair logic",
+            "Initializes postfix log parser",
+            "Sets up server listening",
+            "Sets up queue event listeners",
+            "Sets up bounce handler",
+            "Sets up graceful shutdown"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Extract database connection, repair logic, parser initialization, queue setup, event handling, and shutdown to separate functions"
+        }
+      ]
+    },
+    {
+      "type": "deep_nesting",
+      "description": "Code with excessive nesting levels making it hard to read",
+      "locations": [
+        {
+          "component": "postfixLogParser.js",
+          "method": "injectEvent",
+          "lines": "304-352",
+          "issues": [
+            "Nested destructuring",
+            "Conditional for network/sender error detection",
+            "Deep object creation with multiple conditions"
+          ],
+          "nesting_depth": "4-5 levels",
+          "severity": "low",
+          "suggested_refactor": "Extract network error detection to helper function, use early returns"
+        },
+        {
+          "component": "routes/api.js",
+          "method": "/validate-emails endpoint handler",
+          "lines": "120-139",
+          "issues": [
+            "Try/catch block",
+            "For loop with nested if/continue",
+            "Await inside loop",
+            "Result pushing"
+          ],
+          "nesting_depth": "4 levels",
+          "severity": "low",
+          "suggested_refactor": "Use map with Promise.all for parallel validation"
+        }
+      ]
+    },
+    {
+      "type": "magic_numbers_strings",
+      "description": "Hard-coded numbers and strings that should be constants",
+      "locations": [
+        {
+          "component": "authController.js",
+          "magic_value": "'7d'",
+          "context": "JWT expiresIn",
+          "severity": "low",
+          "suggested_refactor": "Move to configuration or constants file"
+        },
+        {
+          "component": "warmupController.js",
+          "magic_value": "WarmupConfig.js PHASES array",
+          "context": "Hard-coded warmup phases",
+          "severity": "low",
+          "suggested_refactor": "Already well-encapsulated in model, but could be configurable"
+        },
+        {
+          "component": "postfixLogParser.js",
+          "magic_value": "5000 (maxBuffer), 1000 (reconnect timeout)",
+          "context": "Hard-coded buffer sizes and timeouts",
+          "severity": "low",
+          "suggested_refactor": "Make configurable via options or environment variables"
+        },
+        {
+          "component": "server.js",
+          "magic_value": "15000 (docker timeout in eventController)",
+          "context": "Hard-coded timeout values",
+          "severity": "low",
+          "suggested_refactor": "Extract to configuration constants"
+        },
+        {
+          "component": "statsController.js",
+          "magic_value": "50 (limit for recent events), 100 (limit for failed events)",
+          "context": "Hard-coded limits for queries",
+          "severity": "low",
+          "suggested_refactor": "Make configurable via parameters or constants"
+        },
+        {
+          "component": "eventController.js",
+          "magic_value": "30000 (keepalive interval)",
+          "context": "Hard-coded keepalive interval",
+          "severity": "low",
+          "suggested_refactor": "Make configurable"
+        }
+      ]
+    },
+    {
+      "type": "inconsistent_naming",
+      "description": "Inconsistent naming conventions across the codebase",
+      "locations": [
+        {
+          "component": "backend vs frontend",
+          "issue": "Backend uses camelCase for functions/variables, frontend uses camelCase for components but mixed for hooks/vars",
+          "severity": "low",
+          "suggested_refactor": "Establish and enforce consistent naming conventions"
+        },
+        {
+          "component": "routes/api.js",
+          "issue": "Some routes use plural nouns (/domains), some use singular with plural in path (/seeds/:id/toggle)",
+          "severity": "low",
+          "suggested_refactor": "Establish RESTful naming conventions"
+        }
+      ]
+    },
+    {
+      "type": "blocking_io_in_async_context",
+      "description": "Synchronous operations in asynchronous contexts that could block the event loop",
+      "locations": [
+        {
+          "component": "postfixLogParser.js",
+          "method": "_buildEvent",
+          "issue": "DNS lookups and cryptographic operations could be slow",
+          "context": "Actually looks like it's just parsing, but the injectEvent method does have await",
+          "severity": "info",
+          "suggested_refactor": "Already using async/await properly"
+        },
+        {
+          "component": "dnsVerifier.js",
+          "issue": "DNS resolution functions are async but called sequentially",
+          "context": "verifyDomain function calls checkMX, checkSPF, checkDKIM, checkDMARC sequentially",
+          "severity": "medium",
+          "suggested_refactor": "Already using Promise.all - good!"
+        }
+      ]
+    }
+  ],
+  "summary": "The codebase shows several anti-patterns, primarily God objects (domainController, campaignController, App.jsx) and long methods (launchCampaign, _buildEvent, startServer). These represent significant refactoring opportunities to improve maintainability and testability."
+}

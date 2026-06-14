@@ -1,0 +1,158 @@
+{
+  "architecture_violations": [
+    {
+      "type": "layer_violation",
+      "description": "Direct access to data layer from presentation layer or violation of separation between concerns",
+      "locations": [
+        {
+          "violation": "Controllers accessing models directly without service layer",
+          "location": "Throughout backend controllers",
+          "description": "Controllers contain business logic that should be in service layer, calling models directly for complex operations",
+          "examples": [
+            "campaignController.launchCampaign does domain selection, recipient processing, job creation - all business logic",
+            "domainController.verifyDomainEndpoint performs DNS verification logic",
+            "statsController.getCampaignStats performs complex aggregations",
+            "AuthController has user approval/workflow logic"
+          ],
+          "severity": "high",
+          "suggested_refactor": "Introduce service layer between controllers and models to encapsulate business logic"
+        },
+        {
+          "violation": "Business logic in routes",
+          "location": "routes/api.js",
+          "description": "The /validate-emails endpoint contains validation logic that should be in service/util layer",
+          "examples": [
+            "Email validation and MX checking logic in route handler"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Move validation logic to emailVerifier service and call from route"
+        },
+        {
+          "violation": "Direct model access in server.js",
+          "location": "server.js",
+          "description": "Server contains database repair logic and event processing that should be in services",
+          "examples": [
+            "Bounce repair logic in startServer",
+            "Postfix log parser event handling with direct model access"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Move database operations to appropriate services or repositories"
+        }
+      ]
+    },
+    {
+      "type": "missing_abstraction_boundary",
+      "description": "Missing clear boundaries between concerns leading to tight coupling",
+      "locations": [
+        {
+          "violation": "Tight coupling between email sending and warmup/throttling logic",
+          "location": "Worker implementation (implied) and WarmupConfig model",
+          "description": "Email sending process should not need to know about warmup limits - this should be abstracted",
+          "examples": [
+            "Worker checks warmup limits before sending (inferred from architecture)",
+            "WarmupConfig slot reservation is called from somewhere in sending flow"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Use dependency injection or events to decouple sending from throttling"
+        },
+        {
+          "violation": "Tight coupling between Postfix parser and delivery event storage",
+          "location": "postfixLogParser.js",
+          "description": "Parser directly saves to DeliveryEvent model instead of using repository or service",
+          "examples": [
+            "_addToBuffer method calls DeliveryEvent.create() directly"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Introduce delivery event repository or service abstraction"
+        },
+        {
+          "violation": "Tight coupling between tracking logic and HTTP layer",
+          "location": "routes/tracking.js",
+          "description": "Tracking routes directly create Tracking model instances instead of using service",
+          "examples": [
+            "Tracking.create() calls in route handlers"
+          ],
+          "severity": "low",
+          "suggested_refactor": "Introduce tracking service to encapsulate tracking logic"
+        }
+      ]
+    },
+    {
+      "type": "inappropriate_service_scope",
+      "description": "Services that are too broad or too narrow in their responsibilities",
+      "locations": [
+        {
+          "violation": "RelayPool handles both global relay creation and user-specific transport creation",
+          "location": "config/relays.js",
+          "description": "RelayPool mixes concerns of global relay management and user-specific transport creation",
+          "examples": [
+            "getRandom/getRoundRobin/getByIndex for global pool",
+            "createTransportForUser for user-specific transports"
+          ],
+          "severity": "low",
+          "suggested_refactor": "Split into GlobalRelayPool and UserTransportFactory"
+        },
+        {
+          "violation": "PostfixLogParser handles both parsing and persistence",
+          "location": "utils/postfixLogParser.js",
+          "description": "Parser mixes log parsing logic with database persistence",
+          "examples": [
+            "_addToBuffer method does both parsing and DeliveryEvent.create()"
+          ],
+          "severity": "medium",
+          "suggested_refactor": "Separate parser (pure parsing) from persistence service"
+        }
+      ]
+    },
+    {
+      "type": "violation_of_single_responsibility_principle",
+      "description": "Classes or functions that have more than one reason to change",
+      "locations": [
+        {
+          "violation": "PostfixLogParser class",
+          "location": "utils/postfixLogParser.js",
+          "description": "Handles log parsing, event building, buffering, stats tracking, database persistence, and event emission",
+          "examples": [
+            "parseLine (parsing)",
+            "_buildEvent (event building)",
+            "_addToBuffer (buffering + persistence)",
+            "_updateStats (stats tracking)",
+            "emit (event emission)",
+            "reconnect logic (network resilience)"
+          ],
+          "severity": "high",
+          "suggested_refactor": "Split into LogParser, EventBuilder, BufferManager, PersistenceService, StatsTracker, and ReconnectionManager"
+        },
+        {
+          "violation": "App.jsx component",
+          "location": "frontend/src/App.jsx",
+          "description": "Handles authentication, routing, data loading, state management, UI layout, and error handling",
+          "examples": [
+            "Authentication logic (login/register/logout)",
+            "Data fetching (loadDomains, loadCampaigns, loadOverviewStats)",
+            "UI state management (sidebar, toast, search)",
+            "Route rendering (all the Routes)",
+            "Layout structure (header, sidebar, main content, FAB)"
+          ],
+          "severity": "high",
+          "suggested_refactor": "Split into AuthContext, Layout components, Data service, and route-specific components"
+        },
+        {
+          "violation": "domainController.js",
+          "location": "backend/src/controllers/domainController.js",
+          "description": "Handles domain management, verification, DKIM generation, importing, and testing",
+          "examples": [
+            "CRUD operations (add/get/update/delete)",
+            "Verification logic (verifyDomainEndpoint)",
+            "DKIM generation (generateDkim)",
+            "Test sending (sendTestEmail)",
+            "Import logic (importBrevoDomains, etc.)"
+          ],
+          "severity": "high",
+          "suggested_refactor": "Split into domain service, verification service, import service, and keep controller as thin interface"
+        }
+      ]
+    }
+  ],
+  "summary": "The codebase shows significant architecture violations, primarily layer violations (business logic in controllers), missing abstraction boundaries (tight coupling between layers), and violations of Single Responsibility Principle (God objects like PostfixLogParser, App.jsx, and domainController). These issues make the code harder to maintain, test, and extend."
+}

@@ -1,0 +1,396 @@
+{
+  "backend": {
+    "data_flow": {
+      "user_management": {
+        "description": "Handles user registration, authentication, approval, and employee management",
+        "components": [
+          "authController",
+          "User model"
+        ],
+        "interactions": [
+          {
+            "from": "authController.register",
+            "to": "User model",
+            "action": "creates new user document with bcrypt password hashing"
+          },
+          {
+            "from": "authController.login",
+            "to": "User model",
+            "action": "finds user by email and compares password using bcrypt"
+          },
+          {
+            "from": "authController.approveUser/rejectUser",
+            "to": "User model",
+            "action": "updates user status and approval metadata"
+          },
+          {
+            "from": "authController.getEmployees",
+            "to": "User model",
+            "action": "finds approved users and counts their campaigns"
+          }
+        ]
+      },
+      "campaign_management": {
+        "description": "Handles campaign creation, domain selection, launching, and tracking",
+        "components": [
+          "campaignController",
+          "Campaign model",
+          "Domain model",
+          "WarmupConfig model",
+          "emailSendingQueue (bullmq)",
+          "RelayPool",
+          "Tracking model",
+          "DeliveryEvent model"
+        ],
+        "interactions": [
+          {
+            "from": "campaignController.createCampaign",
+            "to": "Campaign model",
+            "action": "creates campaign document with recipients, domains, and settings"
+          },
+          {
+            "from": "campaignController.createCampaign",
+            "to": "Tracking model (indirect via routes/tracking.js)",
+            "action": "injects tracking pixel and wrap links for open/click tracking"
+          },
+          {
+            "from": "campaignController.launchCampaign",
+            "to": "Domain model",
+            "action": "finds active domains for sender rotation"
+          },
+          {
+            "from": "campaignController.launchCampaign",
+            "to": "WarmupConfig model",
+            "action": "checks warmup limits before allowing campaign launch (indirect via worker)"
+          },
+          {
+            "from": "campaignController.launchCampaign",
+            "to": "emailSendingQueue",
+            "action": "adds bulk email sending jobs to BullMQ queue"
+          },
+          {
+            "from": "worker (emailSendingQueue processor)",
+            "to": "RelayPool",
+            "action": "selects appropriate transport (user SMTP or global Brevo) for sending"
+          },
+          {
+            "from": "worker (emailSendingQueue processor)",
+            "to": "DeliveryEvent model",
+            "action": "injects sent/bounced events via postfixLogParser"
+          },
+          {
+            "from": "postfixLogParser",
+            "to": "DeliveryEvent model",
+            "action": "saves parsed log events to MongoDB"
+          },
+          {
+            "from": "postfixLogParser",
+            "to": "eventController",
+            "action": "emits events via EventEmitter for SSE streaming"
+          },
+          {
+            "from": "statsController.getCampaignStats",
+            "to": "Campaign model",
+            "action": "finds campaign and counts recipient statuses"
+          },
+          {
+            "from": "statsController.getCampaignStats",
+            "to": "Tracking model",
+            "action": "aggregates open/click events and calculates rates"
+          },
+          {
+            "from": "statsController.getCampaignStats",
+            "to": "DeliveryEvent model",
+            "action": "finds failed delivery events for timeline"
+          }
+        ]
+      },
+      "domain_management": {
+        "description": "Handles domain verification, DKIM management, and external provider integration",
+        "components": [
+          "domainController",
+          "Domain model",
+          "dnsVerifier utility",
+          "crypto utility"
+        ],
+        "interactions": [
+          {
+            "from": "domainController.addDomain",
+            "to": "Domain model",
+            "action": "creates domain document with sender email validation"
+          },
+          {
+            "from": "domainController.verifyDomainEndpoint",
+            "to": "dnsVerifier.verifyDomain",
+            "action": "checks MX, SPF, DKIM, and DMARC records"
+          },
+          {
+            "from": "domainController.generateDkim",
+            "to": "dnsVerifier.generateDkimKeys",
+            "action": "generates RSA key pair for DKIM"
+          },
+          {
+            "from": "domainController.sendTestEmail",
+            "to": "nodemailer (via RelayPool or direct SMTP)",
+            "action": "sends test email using domain credentials"
+          },
+          {
+            "from": "domainController.importBrevoDomains/SparkpostDomains/VpsDomains",
+            "to": "external provider APIs",
+            "action": "fetches domains from Brevo, SparkPost, or VPS Postal"
+          }
+        ]
+      },
+      "smtp_configuration": {
+        "description": "Manages user-specific SMTP configurations with encryption",
+        "components": [
+          "smtpConfigController",
+          "SmtpConfig model",
+          "crypto utility"
+        ],
+        "interactions": [
+          {
+            "from": "smtpConfigController.createSmtpConfig/updateSmtpConfig",
+            "to": "crypto.encryptSmtpPassword",
+            "action": "encrypts SMTP password before storage"
+          },
+          {
+            "from": "smtpConfigController.getSmtpConfig/updateSmtpConfig",
+            "to": "crypto.decryptSmtpPassword",
+            "action": "decrypts SMTP password for response/testing"
+          },
+          {
+            "from": "smtpConfigController.testSmtpConnection",
+            "to": "nodemailer",
+            "action": "creates transport and verifies SMTP connection"
+          },
+          {
+            "from": "smtpConfigController.testSmtpConnection (VPS provider)",
+            "to": "Postal HTTP API",
+            "action": "tests connection via HTTP API instead of SMTP"
+          }
+        ]
+      },
+      "warmup_management": {
+        "description": "Manages email warmup schedule and rate limiting",
+        "components": [
+          "warmupController",
+          "WarmupConfig model"
+        ],
+        "interactions": [
+          {
+            "from": "warmupController.getWarmupStatus",
+            "to": "WarmupConfig model",
+            "action": "retrieves warmup configuration and calculates current phase"
+          },
+          {
+            "from": "warmupController.updateWarmupConfig",
+            "to": "WarmupConfig model",
+            "action": "updates warmup configuration (enabled, start date, manual limit)"
+          },
+          {
+            "from": "warmupController.getGlobalLimits",
+            "to": "WarmupConfig model",
+            "action": "gets current daily limit based on warmup phase"
+          },
+          {
+            "from": "WarmupConfig model (static methods)",
+            "to": "WarmupConfig model",
+            "action": "reserveSlot/releaseSlot manages daily sent count with date reset"
+          }
+        ]
+      },
+      "monitoring_and_analytics": {
+        "description": "Provides analytics, monitoring, and event streaming capabilities",
+        "components": [
+          "statsController",
+          "eventController",
+          "monitoringController",
+          "Campaign model",
+          "Tracking model",
+          "DeliveryEvent model",
+          "DmarcReport model"
+        ],
+        "interactions": [
+          {
+            "from": "statsController.getOverviewStats",
+            "to": "Campaign model",
+            "action": "counts campaigns and aggregates sent/failed counts"
+          },
+          {
+            "from": "statsController.getOverviewStats",
+            "to": "Tracking model",
+            "action": "counts opens, clicks, unsubscribes and calculates unique metrics"
+          },
+          {
+            "from": "eventController.getEventStream",
+            "to": "postfixLogParser",
+            "action": "sets up SSE stream and attaches event listeners"
+          },
+          {
+            "from": "postfixLogParser",
+            "to": "eventController",
+            "action": "emits 'event' and 'event_deleted' for SSE consumption"
+          },
+          {
+            "from": "monitoringController.getDmarcReports",
+            "to": "DmarcReport model",
+            "action": "retrieves DMARC reports with limit and sort"
+          },
+          {
+            "from": "monitoringController.getDmarcSummary",
+            "to": "DmarcReport model",
+            "action": "aggregates DMARC policy compliance statistics"
+          }
+        ]
+      }
+    },
+    "frontend": {
+      "state_management": {
+        "description": "Handles application state, authentication, and data fetching",
+        "components": [
+          "App.jsx",
+          "./utils/api.js"
+        ],
+        "interactions": [
+          {
+            "from": "App.jsx",
+            "to": "./utils/api.js",
+            "action": "uses apiFetch for all backend API calls with automatic token handling"
+          },
+          {
+            "from": "./utils/api.js",
+            "to": "localStorage",
+            "action": "gets/sets/removes mailerToken and mailerUser for session persistence"
+          },
+          {
+            "from": "./utils/api.js",
+            "to": "globalLogoutCallback",
+            "action": "triggers callback on 401 response to handle automatic logout"
+          },
+          {
+            "from": "App.jsx useEffect",
+            "to": "./utils/api.js",
+            "action": "loads dashboard data (domains, campaigns, stats) when session token changes"
+          }
+        ]
+      },
+      "view_interactions": {
+        "description": "Defines how different views interact and share data through React Router and props",
+        "components": [
+          "App.jsx (Routes)",
+          "DashboardView",
+          "DomainsView",
+          "DomainDetailView",
+          "ComposeView",
+          "EventsView",
+          "SeedsView",
+          "EmployeeView",
+          "EmployeeDetailView",
+          "RulesView",
+          "SettingsView",
+          "CampaignDetailView"
+        ],
+        "interactions": [
+          {
+            "from": "App.jsx",
+            "to": "DashboardView",
+            "action": "passes campaigns, domains, overviewStats, and callback functions as props"
+          },
+          {
+            "from": "App.jsx",
+            "to": "DomainsView",
+            "action": "passes domains and callback functions for domain management"
+          },
+          {
+            "from": "App.jsx",
+            "to": "DomainDetailView",
+            "action": "passes onRefresh and onDeleteDomain callbacks (domain ID from route params)"
+          },
+          {
+            "from": "App.jsx",
+            "to": "ComposeView",
+            "action": "passes domains and onSaveCampaign callback"
+          },
+          {
+            "from": "App.jsx",
+            "to": "EventsView",
+            "action": "passes user and showToast callback"
+          },
+          {
+            "from": "App.jsx",
+            "to": "SeedsView",
+            "action": "passes user and showToast callback"
+          },
+          {
+            "from": "App.jsx",
+            "to": "EmployeeView",
+            "action": "passes showToast callback"
+          },
+          {
+            "from": "App.jsx",
+            "to": "EmployeeDetailView",
+            "action": "passes showToast callback (employee ID from route params)"
+          },
+          {
+            "from": "App.jsx",
+            "to": "RulesView",
+            "action": "passes showToast callback"
+          },
+          {
+            "from": "App.jsx",
+            "to": "SettingsView",
+            "action": "passes showToast callback"
+          },
+          {
+            "from": "App.jsx",
+            "to": "CampaignDetailView",
+            "action": "passes showToast callback (campaign ID from route params)"
+          },
+          {
+            "from": "DashboardView/DomainsView/etc.",
+            "to": "./utils/api.js",
+            "action": "makes API calls through props passed from App or direct usage"
+          }
+        ]
+      },
+      "component_specific_interactions": {
+        "description": "Details specific interactions within key frontend components",
+        "components": [
+          "ComposeView",
+          "CampaignDetailView",
+          "DomainDetailView",
+          "EventsView",
+          "SettingsView"
+        ],
+        "interactions": [
+          {
+            "from": "ComposeView",
+            "to": "./utils/api.js",
+            "action": "POST /campaigns to save draft, POST /campaigns/:id/launch to launch"
+          },
+          {
+            "from": "CampaignDetailView",
+            "to": "./utils/api.js",
+            "action": "GET /campaigns/:id/stats for statistics, DELETE /campaigns/:id for deletion"
+          },
+          {
+            "from": "DomainDetailView",
+            "to": "./utils/api.js",
+            "action": "GET /domains/:id for details, DELETE /domains/:id for deletion, POST /domains/:id/verify for verification, POST /domains/:id/dkim/generate for DKIM, POST /domains/:id/test-send for test email"
+          },
+          {
+            "from": "EventsView",
+            "to": "./utils/api.js",
+            "action": "GET /events/stream for SSE connection, GET /events/stats for statistics, POST /events/clear-queue and /events/flush-queue for mail queue management, GET /events/export-failed for CSV export, DELETE /events and DELETE /events/:id for event deletion"
+          },
+          {
+            "from": "SettingsView",
+            "to": "./utils/api.js",
+            "action": "GET /smtp-config for list, POST /smtp-config for creation, PUT /smtp-config/:id for update, DELETE /smtp-config/:id for deletion, POST /smtp-config/test for testing"
+          }
+        ]
+      }
+    }
+  }
+}
