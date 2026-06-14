@@ -9,18 +9,25 @@ const relayPool = require('../config/relays');
 const Campaign = require('../models/Campaign');
 const Domain = require('../models/Domain');
 const SmtpConfig = require('../models/SmtpConfig');
+const Suppression = require('../models/Suppression');
 const { decryptSmtpPassword } = require('../utils/crypto');
 const { createPostalClient } = require('../providers/postal');
 
 const htmlToPlainText = (html) => {
-  return html
+  let text = html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<\/div>/gi, '\n')
     .replace(/<\/li>/gi, '\n')
     .replace(/<\/h[1-6]>/gi, '\n\n')
     .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/td>/gi, ' ')
+    .replace(/<\/th>/gi, ' ')
     .replace(/<a[^>]+href=["']([^"']*)["'][^>]*>(.*?)<\/a>/gi, '$2 ($1)')
+    .replace(/<img[^>]+alt=["']([^"']*)["'][^>]*>/gi, '$1')
+    .replace(/<img[^>]*>/gi, '[image]')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
@@ -28,8 +35,16 @@ const htmlToPlainText = (html) => {
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
+    .replace(/&[a-z]+;/gi, ' ')
+    .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  if (!text || text.length < 10) {
+    text = 'Please view this email in an HTML-compatible email client.';
+  }
+
+  return text;
 };
 
 const sleep = (milliseconds) =>
@@ -37,15 +52,18 @@ const sleep = (milliseconds) =>
     setTimeout(resolve, milliseconds);
   });
 
-const getDelaySeconds = (delaySettings) => {
-  if (delaySettings.type === 'fixed') {
-    return delaySettings.fixedValue;
-  }
+const MIN_DELAY_SECONDS = 30;
 
-  return (
-    Math.random() * (delaySettings.max - delaySettings.min) +
-    delaySettings.min
-  );
+const getDelaySeconds = (delaySettings) => {
+  let delay;
+  if (delaySettings.type === 'fixed') {
+    delay = delaySettings.fixedValue;
+  } else {
+    delay =
+      Math.random() * (delaySettings.max - delaySettings.min) +
+      delaySettings.min;
+  }
+  return Math.max(delay, MIN_DELAY_SECONDS);
 };
 
 const completeCampaignIfFinished = async (campaignId) => {
@@ -192,6 +210,13 @@ const processEmailJob = async (job) => {
   let userTransport = null;
 
   try {
+    const suppressed = await Suppression.findOne({ email: recipient.email.toLowerCase() });
+    if (suppressed) {
+      console.log(`[Worker] Suppressed email ${recipient.email} — skipping (reason: ${suppressed.reason})`);
+      await updateRecipientStatus(campaignId, recipientId, 'failed');
+      return { recipient: recipient.email, status: 'suppressed', reason: suppressed.reason };
+    }
+
     await reserveDomainCapacity(sendingDomain.id);
     capacityReserved = true;
 
@@ -200,7 +225,17 @@ const processEmailJob = async (job) => {
     // Resolve relay: per-user SMTP config or global fallback
     let relay;
     let isUserSmtp = false;
-    let relayName = 'Global Brevo';
+    let relayName = 'Global (round-robin)';
+
+    const tryAssignRelay = (name) => {
+      const r = relayPool.getByProviderName(name);
+      if (r) {
+        relay = r;
+        relayName = `Global ${name}`;
+        return true;
+      }
+      return false;
+    };
 
     if (userId) {
       const userSmtpConfigs = await SmtpConfig.find({ userId, isActive: true })
@@ -262,19 +297,25 @@ const processEmailJob = async (job) => {
             isUserSmtp = true;
           } catch (decryptErr) {
             console.warn(`[Worker] Failed to decrypt SMTP config ${userSmtpConfig._id} for user ${userId}, falling back to global:`, decryptErr.message);
-            relay = relayPool.getRoundRobin();
-            relayName = 'Global Brevo';
+            if (!tryAssignRelay(sendingDomain.provider)) {
+              relay = relayPool.getRoundRobin();
+              relayName = `Global (round-robin)`;
+            }
           }
         }
       } else {
         console.log(`[Worker] No active SMTP configs for user ${userId}. Falling back to global relay pool.`);
-        relay = relayPool.getRoundRobin();
-        relayName = 'Global Brevo';
+        if (!tryAssignRelay(sendingDomain.provider)) {
+          relay = relayPool.getRoundRobin();
+          relayName = `Global (round-robin)`;
+        }
       }
     } else {
       console.log(`[Worker] No userId for job. Falling back to global relay pool.`);
-      relay = relayPool.getRoundRobin();
-      relayName = 'Global Brevo';
+      if (!tryAssignRelay(sendingDomain.provider)) {
+        relay = relayPool.getRoundRobin();
+        relayName = `Global (round-robin)`;
+      }
     }
 
     // Persist chosen SMTP name on the job data so it is visible in the queue event handlers (even if it fails)
@@ -292,6 +333,9 @@ const processEmailJob = async (job) => {
     // Generate plain text from HTML
     const plainText = htmlToPlainText(finalHtml);
 
+    const baseUrl = (process.env.BASE_URL || 'http://localhost:4000').replace(/\/+$/, '');
+    const unsubscribeUrl = `${baseUrl}/track/unsubscribe/${campaignId}/${recipientId}`;
+
     const mailOptions = {
       from: {
         name: sendingDomain.senderName,
@@ -305,15 +349,27 @@ const processEmailJob = async (job) => {
       html: finalHtml,
       text: plainText,
       messageId: `<${campaignId}.${recipientId}.${crypto.randomUUID()}@${sendingDomain.domainName}>`,
+      list: {
+        unsubscribe: {
+          url: unsubscribeUrl,
+          comment: 'Unsubscribe from this campaign'
+        }
+      },
       headers: {
-        // commented out for staging demo to land in Primary Inbox instead of Promotions
-        // 'Precedence': 'bulk',
-        'X-Mailer': 'Mailer/1.0',
-        // 'List-Unsubscribe': `<mailto:unsubscribe@${sendingDomain.domainName}?subject=unsubscribe>, <${process.env.BASE_URL || 'http://localhost:4000'}/track/unsubscribe/${campaignId}/${recipientId}>`,
-        // 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        // 'Feedback-ID': `${campaignId}:${recipientId}:${sendingDomain.domainName}:Mailer`
+        'Precedence': 'bulk',
+        'List-Unsubscribe': `<mailto:unsubscribe@${sendingDomain.domainName}?subject=unsubscribe>, <${unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        'Feedback-ID': `${campaignId}:${recipientId}:${sendingDomain.domainName}:Mailer`
       }
     };
+
+    if (sendingDomain.dkimPrivateKey && sendingDomain.dkimSelector) {
+      mailOptions.dkim = {
+        domainName: sendingDomain.domainName,
+        keySelector: sendingDomain.dkimSelector,
+        privateKey: sendingDomain.dkimPrivateKey
+      };
+    }
 
 
 
@@ -356,9 +412,45 @@ const processEmailJob = async (job) => {
     }
 
     const attempts = job.opts.attempts || 1;
+    const SOFT_BOUNCE_LIMIT = 3;
 
     if (job.attemptsMade + 1 >= attempts) {
       await updateRecipientStatus(campaignId, recipientId, 'failed');
+
+      const errorMessage = error.message ? error.message.toLowerCase() : '';
+      const isHardBounce = /(user unknown|no such user|mailbox not found|invalid recipient|address rejected|does not exist|invalid address|550 5\.1\.1|550 5\.1\.0|552 5\.2\.2|mailbox full|quota exceeded|550 5\.2\.1|mailbox disabled|5\.1\.1|5\.1\.0)/i.test(errorMessage);
+      const isSoftBounce = /(tempor|try again|timeout|congestion|4\.\d+\.\d+|450|451|452)/i.test(errorMessage);
+
+      try {
+        if (isHardBounce) {
+          await Suppression.findOneAndUpdate(
+            { email: recipient.email.toLowerCase() },
+            { email: recipient.email.toLowerCase(), reason: 'bounce', campaignId, diagnostic: error.message.substring(0, 500) },
+            { upsert: true, new: true }
+          );
+          console.log(`[Worker] Added ${recipient.email} to suppression list (hard bounce)`);
+        } else if (isSoftBounce) {
+          const existing = await Suppression.findOne({ email: recipient.email.toLowerCase(), reason: 'soft_bounce' });
+          const newCount = (existing?.softBounceCount || 0) + 1;
+          if (newCount >= SOFT_BOUNCE_LIMIT) {
+            await Suppression.findOneAndUpdate(
+              { email: recipient.email.toLowerCase() },
+              { email: recipient.email.toLowerCase(), reason: 'bounce', softBounceCount: newCount, campaignId, diagnostic: `Suppressed after ${newCount} soft bounces` },
+              { upsert: true, new: true }
+            );
+            console.log(`[Worker] Added ${recipient.email} to suppression list (${newCount} consecutive soft bounces)`);
+          } else {
+            await Suppression.findOneAndUpdate(
+              { email: recipient.email.toLowerCase(), reason: 'soft_bounce' },
+              { email: recipient.email.toLowerCase(), reason: 'soft_bounce', softBounceCount: newCount, campaignId, diagnostic: error.message.substring(0, 200) },
+              { upsert: true, new: true }
+            );
+            console.log(`[Worker] Soft bounce #${newCount} for ${recipient.email}`);
+          }
+        }
+      } catch (supErr) {
+        console.warn('[Worker] Failed to record suppression:', supErr.message);
+      }
     }
 
     throw error;

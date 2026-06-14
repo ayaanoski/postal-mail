@@ -123,21 +123,22 @@ const verifyDomainEndpoint = async (req, res) => {
       return res.status(403).json({ message: 'You do not have permission to verify this domain' });
     }
 
-    // Demo Cheat Code: Always succeed verification to allow smooth testing during client meeting
-    const result = {
-      passed: true,
-      score: '4/4',
-      timestamp: new Date().toISOString(),
-      mx: { exists: true, records: [`mail.${domain.domainName}`] },
-      spf: { exists: true, record: `v=spf1 include:mail.${domain.domainName} ~all` },
-      dkim: { exists: true, selector: 'smtp2go', record: 'v=DKIM1; k=rsa; p=...', matches: true },
-      dmarc: { exists: true, record: 'v=DMARC1; p=none' }
-    };
+    const result = await verifyDomain(domain.domainName, domain.dkimSelector, domain.dkimPublicKey);
 
     domain.verified = result.passed;
     domain.lastVerifiedAt = new Date();
     domain.verificationDetails = result;
-    domain.status = 'Active';
+
+    const dkimConfigured = result.dkim?.exists && result.dkim?.matches;
+    const spfConfigured = result.spf?.exists;
+    const dmarcConfigured = result.dmarc?.exists;
+
+    if (dkimConfigured && spfConfigured) {
+      domain.status = 'Active';
+    } else {
+      domain.status = 'Pending Verification';
+    }
+
     await domain.save();
 
     let responseDomain = attachDnsRecords(domain);

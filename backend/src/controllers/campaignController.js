@@ -1,14 +1,25 @@
 const Campaign = require('../models/Campaign');
 const Domain = require('../models/Domain');
+const Suppression = require('../models/Suppression');
+const { isRoleBasedEmail, isHoneypotEmail, isHoneypotDomain, isCatchAllDomain } = require('../utils/emailVerifier');
 const { emailSendingQueue } = require('../config/queue');
+
+const getTrackingBaseUrl = () => {
+  const base = process.env.TRACKING_DOMAIN || process.env.BASE_URL || 'http://localhost:4000';
+  if (isBareIp(base.replace(/^https?:\/\//, '').split('/')[0])) {
+    console.warn('[Tracking] WARNING: TRACKING_DOMAIN points to a bare IP. Set TRACKING_DOMAIN to a proper domain for better deliverability.');
+  }
+  return base.replace(/\/+$/, '');
+};
 
 const injectTrackingPixel = (htmlContent, campaignId, baseUrl) => {
   let processedHtml = htmlContent
     .replace(/\{\{campaignId\}\}/g, campaignId)
     .replace(/\{\{baseUrl\}\}/g, baseUrl);
 
-  const pixelUrl = `${baseUrl}/track/open/${campaignId}/{{recipientId}}`;
-  const pixel = `<img src="${pixelUrl}" width="1" height="1" style="display:none" alt="" />`;
+  const trackingBase = getTrackingBaseUrl();
+  const pixelUrl = `${trackingBase}/track/open/${campaignId}/{{recipientId}}`;
+  const pixel = `<img src="${pixelUrl}" width="1" height="1" alt="" />`;
   const bodyCloseIndex = processedHtml.toLowerCase().lastIndexOf('</body>');
   if (bodyCloseIndex !== -1) {
     return processedHtml.slice(0, bodyCloseIndex) + pixel + processedHtml.slice(bodyCloseIndex);
@@ -16,19 +27,26 @@ const injectTrackingPixel = (htmlContent, campaignId, baseUrl) => {
   return processedHtml + pixel;
 };
 
+const isBareIp = (hostname) => {
+  return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(hostname);
+};
+
 const wrapLinksForTracking = (htmlContent, campaignId, baseUrl) => {
+  const trackingBase = getTrackingBaseUrl();
   return htmlContent.replace(
     /<a\s+(?:[^>]*?\s+)?href=(["'])(.*?)\1/gi,
     (match, quote, url) => {
+      const decodedUrl = url.replace(/&amp;/g, '&');
       if (
-        url.startsWith(baseUrl + '/track/') ||
-        url.startsWith('{{baseUrl}}/track/')
+        decodedUrl.startsWith(baseUrl + '/track/') ||
+        decodedUrl.startsWith(trackingBase + '/track/') ||
+        decodedUrl.startsWith('{{baseUrl}}/track/')
       ) {
         return match;
       }
-      if (url.startsWith('mailto:') || url.startsWith('#')) return match;
-      const encoded = encodeURIComponent(url);
-      const trackUrl = `${baseUrl}/track/click/${campaignId}/{{recipientId}}?url=${encoded}`;
+      if (decodedUrl.startsWith('mailto:') || decodedUrl.startsWith('#')) return match;
+      const encoded = encodeURIComponent(decodedUrl);
+      const trackUrl = `${trackingBase}/track/click/${campaignId}/{{recipientId}}?url=${encoded}`;
       return match.replace(`href=${quote}${url}${quote}`, `href=${quote}${trackUrl}${quote}`);
     }
   );
@@ -48,6 +66,8 @@ const createCampaign = async (req, res) => {
       attachments
     } = req.body;
 
+    const suppressedEmails = await Suppression.find().distinct('email');
+
     let parsedRecipients;
     if (Array.isArray(recipients)) {
       parsedRecipients = recipients;
@@ -65,6 +85,65 @@ const createCampaign = async (req, res) => {
         .filter((r) => r.email && r.email.includes('@'));
     }
 
+    const roleBasedEmails = [];
+    const suppressedFromList = [];
+    const honeypotEmails = [];
+    const catchAllDomains = [];
+
+    const checkedDomains = new Set();
+    const catchAllCache = new Map();
+
+    for (const r of parsedRecipients) {
+      const domain = r.email.split('@')[1];
+      if (!checkedDomains.has(domain)) {
+        checkedDomains.add(domain);
+        if (!catchAllCache.has(domain)) {
+          try {
+            const isCatchAll = await isCatchAllDomain(domain);
+            catchAllCache.set(domain, isCatchAll);
+          } catch {
+            catchAllCache.set(domain, false);
+          }
+        }
+      }
+    }
+
+    parsedRecipients = parsedRecipients.filter((r) => {
+      if (suppressedEmails.includes(r.email.toLowerCase())) {
+        suppressedFromList.push(r.email);
+        return false;
+      }
+      if (isHoneypotEmail(r.email) || isHoneypotDomain(r.email.split('@')[1])) {
+        honeypotEmails.push(r.email);
+        return false;
+      }
+      if (isRoleBasedEmail(r.email)) {
+        roleBasedEmails.push(r.email);
+        return false;
+      }
+      const domain = r.email.split('@')[1];
+      if (catchAllCache.get(domain)) {
+        catchAllDomains.push(r.email);
+        return false;
+      }
+      return true;
+    });
+
+    const filteredCounts = [];
+    if (roleBasedEmails.length > 0) filteredCounts.push(`${roleBasedEmails.length} role-based`);
+    if (suppressedFromList.length > 0) filteredCounts.push(`${suppressedFromList.length} suppressed`);
+    if (honeypotEmails.length > 0) filteredCounts.push(`${honeypotEmails.length} honeypot`);
+    if (catchAllDomains.length > 0) filteredCounts.push(`${catchAllDomains.length} catch-all domain`);
+    if (filteredCounts.length > 0) {
+      console.log(`[Campaign] Filtered: ${filteredCounts.join(', ')}`);
+    }
+
+    if (parsedRecipients.length === 0) {
+      return res.status(400).json({
+        message: 'All recipients were filtered out (role-based, suppressed, or invalid emails). No campaign created.'
+      });
+    }
+
     // Create Campaign first to get the _id for tracking links/pixel
     const campaign = await Campaign.create({
       name,
@@ -79,7 +158,7 @@ const createCampaign = async (req, res) => {
       userId: req.user.id
     });
 
-    const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
+    const baseUrl = process.env.TRACKING_DOMAIN || process.env.BASE_URL || 'http://localhost:4000';
     const processedHtml = wrapLinksForTracking(
       injectTrackingPixel(htmlContent, campaign._id.toString(), baseUrl),
       campaign._id.toString(),

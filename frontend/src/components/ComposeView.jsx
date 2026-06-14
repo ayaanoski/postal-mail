@@ -22,7 +22,7 @@ export default function ComposeView({
   const [formData, setFormData] = useState({
     name: initialCampaign ? `${initialCampaign.name} (Copy)` : '',
     subject: initialCampaign ? initialCampaign.subject : '',
-    htmlContent: initialCampaign ? initialCampaign.htmlContent : `Hi {{name}},<br/><br/>I wanted to reach out and introduce myself. I'm writing to share some information that I believe would be relevant to you.<br/><br/>I'd love to schedule a brief call to discuss further. Would any time this week work for you?<br/><br/>Looking forward to hearing from you.<br/><br/>Best regards,<br/><br/><strong>Your Name</strong><br/>Your Title<br/>Your Company`,
+    htmlContent: initialCampaign ? initialCampaign.htmlContent : `Hi {{name}},<br/><br/>I hope this message finds you well. I came across your profile and was impressed by your work at your company.<br/><br/>I wanted to share a resource that I think you'll find valuable. It covers some insights on [topic] that many professionals in your field have found useful.<br/><br/>You can check it out here: <a href="https://yourdomain.com/resource">https://yourdomain.com/resource</a><br/><br/>Let me know if you have any questions — happy to help.<br/><br/>Best regards,<br/><br/><strong>Your Name</strong><br/>Your Title<br/>Your Company`,
     recipients: initialEmails?.length > 0
       ? initialEmails.join('\n')
       : (initialCampaign ? initialCampaign.recipients.map(r => r.name ? `${r.name}, ${r.email}` : r.email).join('\n') : ''),
@@ -281,8 +281,8 @@ export default function ComposeView({
     const currentSize = attachments.reduce((sum, att) => sum + (att.content ? atob(att.content).length : 0), 0);
     const newFilesSize = files.reduce((sum, f) => sum + f.size, 0);
 
-    if (currentSize + newFilesSize > 1.5 * 1024 * 1024) {
-      alert('Total attachment size exceeds the 1.5MB limit. Please upload smaller files.');
+    if (currentSize + newFilesSize > 250 * 1024) {
+      alert('Total attachment size exceeds the 250KB limit. Please upload smaller files.');
       return;
     }
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const Tracking = require('../models/Tracking');
+const Suppression = require('../models/Suppression');
 
 const router = express.Router();
 
@@ -125,6 +126,22 @@ router.all('/unsubscribe/:campaignId/:recipientId', async (req, res) => {
     console.error('[Tracking] Error logging unsubscribe event:', error.message);
   }
 
+  // Record suppression for unsubscribe
+  if (mongoose.Types.ObjectId.isValid(campaignId) && mongoose.Types.ObjectId.isValid(recipientId)) {
+    try {
+      const Campaign = mongoose.model('Campaign');
+      const campaign = await Campaign.findById(campaignId);
+      const recipient = campaign?.recipients?.id(recipientId);
+      if (recipient?.email) {
+        await Suppression.findOneAndUpdate(
+          { email: recipient.email.toLowerCase() },
+          { email: recipient.email.toLowerCase(), reason: 'unsubscribe', campaignId },
+          { upsert: true, new: true }
+        );
+      }
+    } catch (_) {}
+  }
+
   // If one-click unsubscribe request (POST), respond with 200 OK per RFC 8058 spec
   if (req.method === 'POST') {
     return res.status(200).send('Unsubscribed successfully');
@@ -214,6 +231,41 @@ router.all('/unsubscribe/:campaignId/:recipientId', async (req, res) => {
     </body>
     </html>
   `);
+});
+
+/**
+ * POST /track/fbl
+ * Feedback Loop (ARF) endpoint for abuse complaints from providers.
+ * Accepts multipart/form-data or application/x-www-form-urlencoded reports.
+ */
+router.post('/fbl', express.urlencoded({ extended: true, limit: '10mb' }), async (req, res) => {
+  try {
+    const rawBody = req.body;
+    let complaintEmail = null;
+
+    if (rawBody && typeof rawBody === 'object') {
+      const bodyStr = JSON.stringify(rawBody);
+
+      const emailMatch = bodyStr.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (emailMatch) {
+        complaintEmail = emailMatch[0].toLowerCase();
+      }
+    }
+
+    if (complaintEmail) {
+      await Suppression.findOneAndUpdate(
+        { email: complaintEmail },
+        { email: complaintEmail, reason: 'complaint', diagnostic: `FBL: ${JSON.stringify(rawBody).substring(0, 500)}` },
+        { upsert: true, new: true }
+      );
+      console.log(`[FBL] Recorded abuse complaint for ${complaintEmail}`);
+    }
+
+    return res.status(200).send('OK');
+  } catch (error) {
+    console.error('[FBL] Error processing feedback:', error.message);
+    return res.status(200).send('OK');
+  }
 });
 
 module.exports = router;

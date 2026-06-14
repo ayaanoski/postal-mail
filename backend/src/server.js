@@ -50,8 +50,25 @@ app.use((error, req, res, next) => {
   });
 });
 
+const isBareIp = (hostname) => {
+  return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(hostname);
+};
+
 const startServer = async () => {
   await connectDB();
+
+  const baseUrl = process.env.TRACKING_DOMAIN || process.env.BASE_URL || '';
+  if (baseUrl) {
+    const hostname = baseUrl.replace(/^https?:\/\//, '').split('/')[0];
+    if (isBareIp(hostname)) {
+      console.warn('╔══════════════════════════════════════════════════════════════════════╗');
+      console.warn('║  WARNING: TRACKING DOMAIN points to a bare IP address.             ║');
+      console.warn('║  Emails with links to raw IPs are classified as spam by Gmail,     ║');
+      console.warn('║  Outlook, and Yahoo. Set TRACKING_DOMAIN to a real domain.         ║');
+      console.warn('║  Example: TRACKING_DOMAIN=https://track.yourdomain.com             ║');
+      console.warn('╚══════════════════════════════════════════════════════════════════════╝');
+    }
+  }
 
   // One-time repair for incorrect hard bounces caused by unactivated Brevo SMTP accounts
   try {
@@ -171,22 +188,33 @@ const startServer = async () => {
     }
   });
 
-  // Track suppressed emails in-memory (persisted clearance via /events/clear)
-  const suppressedEmails = new Set();
-
   parser.on('event', async (event) => {
     const isBounce = event.status === 'bounced' || event.status === 'expired';
     if (isBounce && event.campaignId && event.recipientId) {
       try {
         const Campaign = require('./models/Campaign');
         const Domain = require('./models/Domain');
+        const Suppression = require('./models/Suppression');
 
         const bounceType = categorizeBounce(event.dsn, event.diagnostic);
         const recipientEmail = event.recipient || '';
         console.log(`[BounceHandler] ${bounceType.toUpperCase()} bounce: ${recipientEmail} (DSN: ${event.dsn})`);
 
-        if (bounceType === 'hard') {
-          suppressedEmails.add(recipientEmail.toLowerCase());
+        if (bounceType === 'hard' && recipientEmail) {
+          try {
+            await Suppression.findOneAndUpdate(
+              { email: recipientEmail.toLowerCase() },
+              {
+                email: recipientEmail.toLowerCase(),
+                reason: 'bounce',
+                campaignId: event.campaignId,
+                diagnostic: event.diagnostic ? event.diagnostic.substring(0, 500) : ''
+              },
+              { upsert: true, new: true }
+            );
+          } catch (supErr) {
+            console.warn('[BounceHandler] Failed to record suppression:', supErr.message);
+          }
         }
 
         // Update campaign recipient status
@@ -227,6 +255,15 @@ const startServer = async () => {
       }
     }
   });
+
+  // In-memory set for fast lookup (rebuilt from DB on restart)
+  const suppressedEmails = new Set();
+  try {
+    const Suppression = require('./models/Suppression');
+    const allSuppressed = await Suppression.find().select('email');
+    allSuppressed.forEach((s) => suppressedEmails.add(s.email));
+    console.log(`[Server] Loaded ${suppressedEmails.size} suppressed emails into memory`);
+  } catch (_) {}
 
   // Expose suppressed set to eventController for clearance on flush/clear
   parser.suppressedEmails = suppressedEmails;
