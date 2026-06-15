@@ -129,3 +129,4 @@
 [2026-06-15T11:19:44.035Z]   RESULT: OK — dailyUsage now 43/2000
 [2026-06-15T11:19:47.181Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
 [2026-06-15T11:19:47.222Z]   BEFORE: status='Active', dailyUsage=43, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:19:47.263Z]   RESULT: OK — dailyUsage now 44/2000
