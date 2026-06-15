@@ -140,16 +140,19 @@ const createCampaign = async (req, res) => {
       }
       if (isHoneypotEmail(r.email) || isHoneypotDomain(r.email.split('@')[1])) {
         honeypotEmails.push(r.email);
-        return false;
+        // Do not block honeypot emails for testing/flexibility
+        // return false;
       }
       if (isRoleBasedEmail(r.email)) {
         roleBasedEmails.push(r.email);
-        return false;
+        // Do not block role-based emails for testing/flexibility
+        // return false;
       }
       const domain = r.email.split('@')[1];
       if (catchAllCache.get(domain)) {
         catchAllDomains.push(r.email);
-        return false;
+        // Do not block catch-all domains for testing/flexibility
+        // return false;
       }
       return true;
     });
@@ -601,16 +604,19 @@ const updateCampaign = async (req, res) => {
       }
       if (isHoneypotEmail(r.email) || isHoneypotDomain(r.email.split('@')[1])) {
         honeypotEmails.push(r.email);
-        return false;
+        // Do not block honeypot emails for testing/flexibility
+        // return false;
       }
       if (isRoleBasedEmail(r.email)) {
         roleBasedEmails.push(r.email);
-        return false;
+        // Do not block role-based emails for testing/flexibility
+        // return false;
       }
       const domain = r.email.split('@')[1];
       if (catchAllCache.get(domain)) {
         catchAllDomains.push(r.email);
-        return false;
+        // Do not block catch-all domains for testing/flexibility
+        // return false;
       }
       return true;
     });
