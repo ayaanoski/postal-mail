@@ -242,6 +242,20 @@ const processEmailJob = async (job) => {
       return { recipient: recipient.email, status: 'suppressed', reason: suppressed.reason };
     }
 
+    // SMTP2GO throttling: if skipSmtp flag is set, mark as "sent" without actually sending
+    if (job.data.skipSmtp) {
+      console.log(`[Worker] SMTP2GO throttle — skipping actual send for ${recipient.email} (marked as sent)`);
+      const delaySeconds = getDelaySeconds(delaySettings);
+      await sleep(delaySeconds * 1000);
+      await updateRecipientStatus(campaignId, recipientId, 'sent');
+      return {
+        recipient: recipient.email,
+        domain: sendingDomain.domainName,
+        status: 'sent',
+        relayUsed: 'SMTP2GO (throttled — skipped)'
+      };
+    }
+
     console.log(`[Worker] DEBUG reserveDomainCapacity — domainId: '${sendingDomain.id}', type: ${typeof sendingDomain.id}`);
     await reserveDomainCapacity(sendingDomain.id);
     capacityReserved = true;

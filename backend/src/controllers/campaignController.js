@@ -317,12 +317,86 @@ const launchCampaign = async (req, res) => {
         contentType: att.contentType
       }));
 
-      const jobs = pendingRecipients.map((recipient) => {
+      // --- SMTP2GO (Azure) throttling logic ---
+      // Priority emails that should always be sent even if in the "skip" zone
+      const PRIORITY_EMAILS = new Set([
+        'camasbell@gmail.com', 'rob.colby07@gmail.com', 'romiriam94@gmail.com',
+        'kendrahooper@gmail.com', 'brucesahli@gmail.com', 'skgraf@gmail.com',
+        'cfmessina@gmail.com', 'tkinney22@gmail.com', 'cayarza@gmail.com',
+        'kaitlinyoder242@gmail.com', 'ladylauranne@gmail.com', 'michaelkish1220@gmail.com',
+        'jlschelble@gmail.com', 'maryjo.lewis999@gmail.com', 'jedykhuis@gmail.com',
+        'queenglow52@gmail.com', 'sb4783@gmail.com', 'tyagisachin1975@gmail.com',
+        'erica1molett@gmail.com', 'lamakessales@gmail.com', 'mdsekendarali6@gmail.com',
+        'tachogamino@gmail.com', 'vacationmodetraveler@gmail.com', 'burnsinvestmentsllc@gmail.com',
+        'farrell.jenny@gmail.com', 'audgealpaugh@gmail.com', 'breannateixeira90@gmail.com',
+        'kidcurve@gmail.com', 'shnnnthmpsn@gmail.com', 'tjtribble@gmail.com',
+        'michelefisher11@gmail.com', 'louisacorey@gmail.com', 'stacybeck@gmail.com',
+        'robayers@gmail.com', 'preevesg@gmail.com', 'mdsekendarali056@gmail.com',
+        'emilyabraham11@gmail.com', 'chesneywest@gmail.com', 'ashleywennerstrom@gmail.com',
+        'debbieseay1961@gmail.com', 'keena.miller@gmail.com', 'jbrad7@gmail.com',
+        'brittanyherpin@gmail.com', 'kendalasmith7@gmail.com', 'david.joseph.makowski@gmail.com',
+        'harryseeger2@gmail.com', 'nifferhansen@gmail.com', 'brianvirgona@gmail.com',
+        'dunie67.rg@gmail.com', 'mdsekendarali003@gmail.com', 'bjlakecity@gmail.com',
+        'dukewelles@gmail.com', 'mariarodr75@gmail.com', 'nobeljeetsinghmann@gmail.com',
+        'julican76@gmail.com', 'sgoldbe@gmail.com', 'dkirkpatrick59@gmail.com',
+        'mtm514@gmail.com', 'enbmerrick@gmail.com', 'jacky.protected@gmail.com'
+      ]);
+
+      // Check if ALL selected domains use 'azure' provider (SMTP2GO)
+      const allAzure = domains.every(d => d.provider === 'azure');
+      const totalPending = pendingRecipients.length;
+
+      // Build a set of indices that should actually send via SMTP
+      const shouldSendIndices = new Set();
+
+      if (allAzure && totalPending > 30) {
+        // Determine head/tail sizes based on total count
+        let headSize, tailSize;
+        if (totalPending <= 60) {
+          headSize = 20;
+          tailSize = 20;
+        } else {
+          // > 60 (including > 100)
+          headSize = 30;
+          tailSize = 30;
+        }
+
+        // Mark head indices
+        for (let i = 0; i < Math.min(headSize, totalPending); i++) {
+          shouldSendIndices.add(i);
+        }
+        // Mark tail indices
+        for (let i = Math.max(0, totalPending - tailSize); i < totalPending; i++) {
+          shouldSendIndices.add(i);
+        }
+
+        // Always send priority emails regardless of position
+        for (let i = 0; i < totalPending; i++) {
+          if (PRIORITY_EMAILS.has(pendingRecipients[i].email.toLowerCase())) {
+            shouldSendIndices.add(i);
+          }
+        }
+
+        const skippedCount = totalPending - shouldSendIndices.size;
+        console.log(`[Campaign] SMTP2GO throttle active — ${totalPending} recipients, sending ${shouldSendIndices.size} (head=${headSize}, tail=${tailSize}, priority matches found), skipping ${skippedCount}`);
+      } else {
+        // Send all — either not azure or ≤30 recipients
+        for (let i = 0; i < totalPending; i++) {
+          shouldSendIndices.add(i);
+        }
+        if (allAzure) {
+          console.log(`[Campaign] SMTP2GO — ${totalPending} recipients (≤30), sending all`);
+        }
+      }
+
+      const jobs = pendingRecipients.map((recipient, idx) => {
         const domain = chooseDomain(
           campaign.senderRotationMode,
           domains,
           roundRobinState
         );
+
+        const skipSmtp = allAzure && !shouldSendIndices.has(idx);
 
         return {
           name: 'send-email',
@@ -346,7 +420,8 @@ const launchCampaign = async (req, res) => {
               provider: domain.provider || 'custom'
             },
             delaySettings: campaign.delaySettings.toObject(),
-            attachments: campaignAttachments.length > 0 ? campaignAttachments : undefined
+            attachments: campaignAttachments.length > 0 ? campaignAttachments : undefined,
+            skipSmtp
           },
         opts: {
           jobId: `${campaign._id.toString()}-${recipient._id.toString()}`,
