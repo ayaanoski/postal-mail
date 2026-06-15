@@ -26,7 +26,6 @@ const getSmtpConfig = async (req, res) => {
         smtpPort: config.smtpPort,
         smtpUser: config.smtpUser,
         smtpPass: plainPass,
-        vpsApiUrl: config.vpsApiUrl || null,
         isActive: config.isActive,
         lastTestedAt: config.lastTestedAt,
         lastTestResult: config.lastTestResult,
@@ -48,7 +47,6 @@ const getSmtpConfig = async (req, res) => {
       smtpPort: smtp2goPort,
       smtpUser: smtp2goUser,
       smtpPass: '••••••••',
-      vpsApiUrl: null,
       isActive: true,
       isHardcoded: true,
       lastTestedAt: new Date(),
@@ -75,7 +73,7 @@ const getSmtpConfig = async (req, res) => {
  */
 const createSmtpConfig = async (req, res) => {
   try {
-    const { name, provider, smtpHost, smtpPort, smtpUser, smtpPass, isActive, vpsApiUrl } = req.body;
+    const { name, provider, smtpHost, smtpPort, smtpUser, smtpPass, isActive } = req.body;
 
     if (!smtpHost || !smtpUser || !smtpPass) {
       return res.status(400).json({ message: 'smtpHost, smtpUser, and smtpPass are required' });
@@ -93,7 +91,6 @@ const createSmtpConfig = async (req, res) => {
       smtpPass: encrypted,
       smtpPassIv: iv,
       smtpPassTag: tag,
-      vpsApiUrl: provider === 'vps' ? (vpsApiUrl || null) : null,
       isActive: typeof isActive === 'boolean' ? isActive : true
     });
 
@@ -107,7 +104,6 @@ const createSmtpConfig = async (req, res) => {
         smtpPort: config.smtpPort,
         smtpUser: config.smtpUser,
         smtpPass: smtpPass,
-        vpsApiUrl: config.vpsApiUrl,
         isActive: config.isActive
       }
     });
@@ -129,7 +125,7 @@ const updateSmtpConfig = async (req, res) => {
     if (id === 'azure-hardcoded-config-id') {
       return res.status(403).json({ message: 'Cannot modify system-hardcoded configuration' });
     }
-    const { name, provider, smtpHost, smtpPort, smtpUser, smtpPass, isActive, vpsApiUrl } = req.body;
+    const { name, provider, smtpHost, smtpPort, smtpUser, smtpPass, isActive } = req.body;
 
     const existing = await SmtpConfig.findOne({ _id: id, userId: req.user.id });
 
@@ -143,7 +139,6 @@ const updateSmtpConfig = async (req, res) => {
     if (smtpPort !== undefined) existing.smtpPort = smtpPort;
     if (smtpUser !== undefined) existing.smtpUser = smtpUser;
     if (typeof isActive === 'boolean') existing.isActive = isActive;
-    if (vpsApiUrl !== undefined) existing.vpsApiUrl = vpsApiUrl;
 
     const needsPasswordUpdate = !!smtpPass && smtpPass !== '••••••••';
     if (needsPasswordUpdate) {
@@ -172,7 +167,6 @@ const updateSmtpConfig = async (req, res) => {
         smtpPort: existing.smtpPort,
         smtpUser: existing.smtpUser,
         smtpPass: plainPass,
-        vpsApiUrl: existing.vpsApiUrl || null,
         isActive: existing.isActive,
         lastTestedAt: existing.lastTestedAt,
         lastTestResult: existing.lastTestResult
@@ -217,7 +211,7 @@ const deleteSmtpConfig = async (req, res) => {
  */
 const testSmtpConnection = async (req, res) => {
   try {
-    let { id, smtpHost, smtpPort, smtpUser, smtpPass, provider, vpsApiUrl } = req.body;
+    let { id, smtpHost, smtpPort, smtpUser, smtpPass, provider } = req.body;
 
     if (id === 'azure-hardcoded-config-id') {
       smtpHost = process.env.SMTP2GO_HOST || 'mail.smtp2go.com';
@@ -241,59 +235,8 @@ const testSmtpConnection = async (req, res) => {
       if (!smtpPort) smtpPort = stored.smtpPort;
       if (!smtpUser) smtpUser = stored.smtpUser;
       if (!provider) provider = stored.provider;
-      if (!vpsApiUrl) vpsApiUrl = stored.vpsApiUrl;
     } else if (!smtpPass || smtpPass === '••••••••') {
       return res.status(400).json({ message: 'Password is required' });
-    }
-
-    // For VPS provider with HTTP API URL, test the API endpoint instead of SMTP
-    if (provider === 'vps' && vpsApiUrl) {
-      try {
-        // Temporarily disable TLS verification for self-signed certificates
-        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-        
-        const response = await fetch(`${vpsApiUrl.replace(/\/+$/, '')}/api/v1/send/raw`, {
-          method: 'POST',
-          headers: {
-            'X-Server-API-Key': smtpPass,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({}),
-          signal: AbortSignal.timeout(10000)
-        });
-
-        const data = await response.json();
-        
-        if (data.status === 'error' && data.data && data.data.code === 'InvalidServerAPIKey') {
-          throw new Error('Invalid Postal API Key');
-        }
-
-        if (!response.ok && response.status >= 500) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        if (id) {
-          await SmtpConfig.findOneAndUpdate(
-            { _id: id, userId: req.user.id },
-            { lastTestedAt: new Date(), lastTestResult: 'success' }
-          );
-        }
-
-        return res.json({ message: 'VPS Postal HTTP API connection successful', result: 'success' });
-      } catch (apiErr) {
-        if (id) {
-          await SmtpConfig.findOneAndUpdate(
-            { _id: id, userId: req.user.id },
-            { lastTestedAt: new Date(), lastTestResult: 'failed' }
-          ).catch(() => {});
-        }
-        return res.status(400).json({
-          message: `VPS HTTP API connection failed: ${apiErr.message}`,
-          error: apiErr.message,
-          result: 'failed'
-        });
-      }
     }
 
     // Standard SMTP test

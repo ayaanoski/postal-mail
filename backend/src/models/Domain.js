@@ -44,7 +44,7 @@ const domainSchema = new mongoose.Schema(
     },
     provider: {
       type: String,
-      enum: ['azure', 'brevo', 'sparkpost', 'custom', 'vps'],
+      enum: ['azure', 'brevo', 'sparkpost', 'custom'],
       default: 'custom'
     },
     verified: {

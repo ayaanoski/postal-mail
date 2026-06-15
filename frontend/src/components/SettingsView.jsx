@@ -22,8 +22,6 @@ export default function SettingsView({ showToast }) {
   const [smtpPass, setSmtpPass] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
-  const [vpsApiUrl, setVpsApiUrl] = useState('');
-  const [useCustomVpsHost, setUseCustomVpsHost] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -44,8 +42,6 @@ export default function SettingsView({ showToast }) {
 
   const handleProviderChange = (newProvider) => {
     setProvider(newProvider);
-    setVpsApiUrl('');
-    setUseCustomVpsHost(false);
     if (newProvider === 'brevo') {
       setSmtpHost('smtp-relay.brevo.com');
       setSmtpPort(587);
@@ -54,10 +50,6 @@ export default function SettingsView({ showToast }) {
       setSmtpHost('smtp.sparkpostmail.com');
       setSmtpPort(587);
       setSmtpUser('SMTP_Injection');
-    } else if (newProvider === 'vps') {
-      setSmtpHost('mail.mailer-us.com');
-      setSmtpPort(587);
-      setSmtpUser('');
     } else {
       setSmtpHost('');
       setSmtpPort(587);
@@ -76,8 +68,6 @@ export default function SettingsView({ showToast }) {
     setSelectedConfig(null);
     setTestResult(null);
     setShowPassword(false);
-    setVpsApiUrl('');
-    setUseCustomVpsHost(false);
     setShowForm(true);
   };
 
@@ -92,8 +82,6 @@ export default function SettingsView({ showToast }) {
     setIsActive(config.isActive !== false);
     setTestResult(null);
     setShowPassword(false);
-    setVpsApiUrl(config.vpsApiUrl || '');
-    setUseCustomVpsHost(config.provider === 'vps' && config.smtpHost !== 'mail.mailer-us.com');
     setShowForm(true);
   };
 
@@ -107,8 +95,7 @@ export default function SettingsView({ showToast }) {
         smtpHost,
         smtpPort: Number(smtpPort),
         smtpUser,
-        isActive,
-        vpsApiUrl: provider === 'vps' ? vpsApiUrl : undefined
+        isActive
       };
       if (smtpPass) body.smtpPass = smtpPass;
 
@@ -146,7 +133,7 @@ export default function SettingsView({ showToast }) {
       if (configId) {
         body = { id: configId };
       } else {
-        body = { smtpHost, smtpPort: Number(smtpPort), smtpUser, provider, vpsApiUrl };
+        body = { smtpHost, smtpPort: Number(smtpPort), smtpUser, provider };
         if (smtpPass) body.smtpPass = smtpPass;
       }
 
@@ -253,7 +240,7 @@ export default function SettingsView({ showToast }) {
               </div>
               <h3 className="text-sm font-bold text-fg">No custom SMTP configured</h3>
               <p className="text-xs text-fg-muted mt-1.5 leading-relaxed font-medium">
-                Create personal SMTP profiles to send from your own Brevo, SparkPost, VPS (Postal), Desktop, or custom relays.
+                Create personal SMTP profiles to send from your own Brevo, SparkPost, Desktop, or custom relays.
               </p>
             </div>
           ) : (
@@ -275,15 +262,12 @@ export default function SettingsView({ showToast }) {
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                             : config.provider === 'sparkpost'
                             ? 'bg-amber-50 text-brand-orange border border-amber-100'
-                            : config.provider === 'vps'
-                            ? 'bg-purple-50 text-purple-700 border border-purple-100'
                             : config.provider === 'azure'
                             ? 'bg-blue-50 text-blue-700 border border-blue-100'
                             : 'bg-slate-50 text-slate-700 border border-slate-100'
                         }`}>
                           {config.provider === 'brevo' && 'B'}
                           {config.provider === 'sparkpost' && 'S'}
-                          {config.provider === 'vps' && 'V'}
                           {config.provider === 'custom' && 'C'}
                           {config.provider === 'azure' && (
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-blue-600">
@@ -419,11 +403,10 @@ export default function SettingsView({ showToast }) {
                 {/* Provider presets */}
                 <div className="flex flex-col gap-1.5">
                   <span className="text-xs font-bold text-fg-secondary pl-1">SMTP Provider</span>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {[
                       { id: 'brevo', label: 'Brevo' },
                       { id: 'sparkpost', label: 'SparkPost' },
-                      { id: 'vps', label: 'VPS (Postal)' },
                       { id: 'custom', label: 'Custom' }
                     ].map((prov) => (
                       <button
@@ -440,11 +423,6 @@ export default function SettingsView({ showToast }) {
                       </button>
                     ))}
                   </div>
-                  {provider === 'vps' && (
-                    <span className="text-[10px] text-purple-600 font-bold pl-1 leading-normal mt-1">
-                      Self-hosted Postal SMTP server. Optionally configure the HTTP API URL below for higher throughput.
-                    </span>
-                  )}
                 </div>
 
                 {/* Host & Port */}
@@ -452,35 +430,14 @@ export default function SettingsView({ showToast }) {
                   <label className="flex flex-col gap-1.5">
                     <span className="text-xs font-bold text-fg-secondary pl-1 flex items-center gap-2">
                       Host
-                      {provider === 'vps' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUseCustomVpsHost(!useCustomVpsHost);
-                            if (!useCustomVpsHost) {
-                              setSmtpHost('');
-                            } else {
-                              setSmtpHost('mail.mailer-us.com');
-                            }
-                          }}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-bold border transition-all cursor-pointer ${
-                            useCustomVpsHost
-                              ? 'bg-purple-50 text-purple-700 border-purple-200'
-                              : 'bg-slate-50 text-slate-500 border-slate-200'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${useCustomVpsHost ? 'bg-purple-500' : 'bg-slate-400'}`} />
-                          {useCustomVpsHost ? 'Custom Host' : 'Default'}
-                        </button>
-                      )}
                     </span>
                     <input
                       className="w-full h-11 px-4.5 bg-surface-secondary border border-transparent rounded-full outline-none text-sm text-fg placeholder:text-fg-muted focus:border-border focus:bg-white focus:ring-2 focus:ring-accent/5 transition-all font-medium"
                       type="text"
-                      placeholder={provider === 'vps' ? 'mail.mailer-us.com' : 'smtp.example.com'}
+                      placeholder="smtp.example.com"
                       value={smtpHost}
                       onChange={e => setSmtpHost(e.target.value)}
-                      disabled={provider !== 'custom' && provider !== 'vps'}
+                      disabled={provider !== 'custom'}
                       required
                     />
                   </label>
@@ -492,7 +449,7 @@ export default function SettingsView({ showToast }) {
                       placeholder="587"
                       value={smtpPort}
                       onChange={e => setSmtpPort(Number(e.target.value))}
-                      disabled={provider !== 'custom' && provider !== 'vps'}
+                      disabled={provider !== 'custom'}
                       required
                     />
                   </label>
@@ -506,7 +463,7 @@ export default function SettingsView({ showToast }) {
                       provider === 'sparkpost' ? 'opacity-70 cursor-not-allowed' : ''
                     }`}
                     type="text"
-                    placeholder={provider === 'vps' ? 'Postal SMTP username (or API key)' : 'your-username'}
+                    placeholder="your-username"
                     value={smtpUser}
                     onChange={e => setSmtpUser(e.target.value)}
                     disabled={provider === 'sparkpost'}
@@ -517,31 +474,7 @@ export default function SettingsView({ showToast }) {
                       SparkPost SMTP requires the username to be exactly "SMTP_Injection".
                     </span>
                   )}
-                  {provider === 'vps' && (
-                    <span className="text-[10px] text-purple-600 font-bold pl-1 leading-normal">
-                      For Postal SMTP, use the format <code>api-key@server-name</code> or your Postal SMTP username.
-                    </span>
-                  )}
                 </label>
-
-                {/* VPS HTTP API URL (only for VPS provider) */}
-                {provider === 'vps' && (
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-bold text-fg-secondary pl-1">
-                      Postal HTTP API URL <span className="text-fg-muted font-medium">(optional)</span>
-                    </span>
-                    <input
-                      className="w-full h-11 px-4.5 bg-surface-secondary border border-transparent rounded-full outline-none text-sm text-fg placeholder:text-fg-muted focus:border-border focus:bg-white focus:ring-2 focus:ring-accent/5 transition-all font-medium"
-                      type="text"
-                      placeholder="https://postal.your-server.com"
-                      value={vpsApiUrl}
-                      onChange={e => setVpsApiUrl(e.target.value)}
-                    />
-                    <span className="text-[10px] text-fg-muted font-bold pl-1 leading-normal">
-                      When set, the system will send via Postal HTTP API instead of SMTP for higher throughput. The SMTP password is used as the API key.
-                    </span>
-                  </label>
-                )}
 
                 {/* Password */}
                 <label className="flex flex-col gap-1.5">

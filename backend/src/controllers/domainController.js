@@ -322,23 +322,13 @@ const sendTestEmail = async (req, res) => {
               userSmtpConfig.smtpPassTag
             );
         
-        if (userSmtpConfig.provider === 'vps' && userSmtpConfig.vpsApiUrl) {
-          const postalClient = createPostalClient({
-            serverUrl: userSmtpConfig.vpsApiUrl,
-            apiKey: plainPass
-          });
-          relay = {
-            sendMail: (mailOptions) => postalClient.sendMail(mailOptions)
-          };
-        } else {
-          userTransport = relayPool.createTransportForUser({
-            smtpHost: userSmtpConfig.smtpHost,
-            smtpPort: userSmtpConfig.smtpPort,
-            smtpUser: userSmtpConfig.smtpUser,
-            smtpPass: plainPass
-          });
-          relay = userTransport;
-        }
+        userTransport = relayPool.createTransportForUser({
+          smtpHost: userSmtpConfig.smtpHost,
+          smtpPort: userSmtpConfig.smtpPort,
+          smtpUser: userSmtpConfig.smtpUser,
+          smtpPass: plainPass
+        });
+        relay = userTransport;
       } catch (decryptErr) {
         console.warn(`[Test Send] Failed to decrypt SMTP config ${userSmtpConfig._id || userSmtpConfig.id}, falling back to global:`, decryptErr.message);
         relay = relayPool.getRandom();
@@ -544,148 +534,6 @@ const importSparkpostDomains = async (req, res) => {
   }
 };
 
-const importVpsDomains = async (req, res) => {
-  try {
-    const { serverUrl, apiKey } = req.body;
-    if (!serverUrl || !apiKey) {
-      return res.status(400).json({ message: 'serverUrl and apiKey are required' });
-    }
-
-    const baseUrl = serverUrl.replace(/\/+$/, '');
-    let importedCount = 0;
-    const errors = [];
-
-    // Helper to make Postal API requests
-    const postalFetch = async (path) => {
-      const url = `${baseUrl}${path}`;
-      const { Agent } = require('undici');
-      const agent = new Agent({ connect: { rejectUnauthorized: false } });
-
-      // Postal accepts BOTH header formats depending on key type.
-      // Server API keys (UUID format) → X-Server-API-Key
-      // This covers both by sending the key in both headers.
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'X-Server-API-Key': apiKey,
-          'X-API-Key': apiKey,
-          'Accept': 'application/json'
-        },
-        dispatcher: agent
-      });
-      if (!response.ok) {
-        throw new Error(`Postal API ${url} returned ${response.status}`);
-      }
-      return response.json();
-    };
-
-    // Try to discover domains via Postal's API at various endpoints
-    // Postal has multiple API structures depending on version
-    let domains = [];
-
-    // Strategy 1: Try /api/v1/server/domains (for direct server API key)
-    try {
-      const serverRes = await postalFetch('/api/v1/server/domains');
-      if (serverRes.domains && Array.isArray(serverRes.domains)) {
-        domains = serverRes.domains;
-      }
-    } catch { /* try next strategy */ }
-
-    // Strategy 2: Try /api/v1/organizations → servers → domains (for root API key)
-    if (domains.length === 0) {
-      try {
-        const orgsRes = await postalFetch('/api/v1/organizations');
-        const orgs = orgsRes.organizations || [];
-        for (const org of orgs) {
-          try {
-            const serversRes = await postalFetch(`/api/v1/organizations/${org.uuid || org.id}/servers`);
-            const servers = serversRes.servers || [];
-            for (const server of servers) {
-              try {
-                const domainsRes = await postalFetch(`/api/v1/servers/${server.uuid || server.id}/domains`);
-                const serverDomains = domainsRes.domains || [];
-                domains.push(...serverDomains.map((d) => ({
-                  ...d,
-                  _serverName: server.name
-                })));
-              } catch (e) {
-                errors.push(`Server ${server.name}: ${e.message}`);
-              }
-            }
-          } catch (e) {
-            errors.push(`Org ${org.name}: ${e.message}`);
-          }
-        }
-      } catch { /* try next strategy */ }
-    }
-
-    // Strategy 3: Try /api/v1/servers (flatter structure)
-    if (domains.length === 0) {
-      try {
-        const serversRes = await postalFetch('/api/v1/servers');
-        const servers = serversRes.servers || [];
-        for (const server of servers) {
-          try {
-            const domainsRes = await postalFetch(`/api/v1/servers/${server.uuid || server.id}/domains`);
-            const serverDomains = domainsRes.domains || [];
-            domains.push(...serverDomains.map((d) => ({
-              ...d,
-              _serverName: server.name
-            })));
-          } catch (e) {
-            errors.push(`Server ${server.name}: ${e.message}`);
-          }
-        }
-      } catch { /* no more strategies */ }
-    }
-
-    if (domains.length === 0) {
-      return res.json({
-        message: 'No domains found via Postal API. You can add domains manually with VPS provider.',
-        importedCount: 0,
-        errors: errors.length > 0 ? errors : undefined
-      });
-    }
-
-    for (const domain of domains) {
-      const domainName = domain.name || domain.domain || domain.domainName;
-      if (!domainName) continue;
-
-      const existing = await Domain.findOne({
-        domainName: domainName.toLowerCase(),
-        userId: req.user.id
-      });
-
-      if (!existing) {
-        const senderEmail = `noreply@${domainName.toLowerCase()}`;
-        await Domain.create({
-          domainName: domainName.toLowerCase(),
-          senderEmail,
-          senderName: domain._serverName || 'VPS Postal',
-          dailyLimit: domain.limit || parseInt(process.env.VPS_DAILY_LIMIT, 10) || 500,
-          status: 'Active',
-          provider: 'vps',
-          verified: true,
-          lastVerifiedAt: new Date(),
-          userId: req.user.id
-        });
-        importedCount++;
-      }
-    }
-
-    return res.json({
-      message: `Imported ${importedCount} domain(s) from VPS Postal server.`,
-      importedCount,
-      errors: errors.length > 0 ? errors : undefined
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: 'Unable to import domains from VPS Postal server',
-      error: error.message
-    });
-  }
-};
-
 const deleteDomain = async (req, res) => {
   try {
     const domain = await Domain.findById(req.params.id);
@@ -817,7 +665,6 @@ module.exports = {
   sendTestEmail,
   importBrevoDomains,
   importSparkpostDomains,
-  importVpsDomains,
   importAzureDomains,
   deleteDomain
 };

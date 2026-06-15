@@ -206,22 +206,6 @@ function AppContent() {
     }
   };
 
-  const handleImportVps = async ({ serverUrl, apiKey }) => {
-    try {
-      const res = await apiFetch('/domains/import-vps', {
-        method: 'POST',
-        body: JSON.stringify({ serverUrl, apiKey })
-      });
-      showToast(res.message || `Domains imported from VPS Postal server.`);
-      if (res.errors && res.errors.length > 0) {
-        console.warn('VPS import errors:', res.errors);
-      }
-      loadDomains();
-    } catch (err) {
-      showToast(err.message, 'error');
-      throw err;
-    }
-  };
 
   const handleImportAzure = async () => {
     try {
@@ -547,7 +531,6 @@ function AppContent() {
                     onAddDomain={handleAddDomain}
                     onImportBrevo={handleImportBrevo}
                     onImportSparkpost={handleImportSparkpost}
-                    onImportVps={handleImportVps}
                     onImportAzure={handleImportAzure}
                     onDeleteDomain={handleDeleteDomain}
                     user={session.user}

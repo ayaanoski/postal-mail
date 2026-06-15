@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 
 const buildSpfRecord = (provider) => {
-  if (provider === 'vps') return 'v=spf1 a mx include:spf.mail.mailer-us.com ~all';
   if (provider === 'sparkpost') return 'v=spf1 include:sparkpostmail.com ~all';
   if (provider === 'brevo') return 'v=spf1 include:spf.brevo.com ~all';
   if (provider === 'azure') return 'v=spf1 include:spf.smtp2go.com ~all';
@@ -184,20 +183,18 @@ export default function DomainDetailView({ onRefresh, onDeleteDomain }) {
     ? 'mailin' 
     : isSparkPost 
       ? 'sparkpost' 
-      : (provider === 'vps' ? 'postal-xxxx' : (domain.dkimSelector || 'default'));
+      : (domain.dkimSelector || 'default');
 
   const dkimRecord = isBrevo
     ? 'Configure and copy DKIM key from your Brevo Dashboard'
     : isSparkPost
       ? 'Refer to SparkPost Sending Domains dashboard'
-      : provider === 'vps'
-        ? 'Copy the exact DKIM record from your Postal Web Interface -> Domains'
-        : (domain.dkimPublicKey
-            ? `v=DKIM1; k=rsa; p=${domain.dkimPublicKey}`
-            : 'Generate DKIM keys below');
+      : (domain.dkimPublicKey
+          ? `v=DKIM1; k=rsa; p=${domain.dkimPublicKey}`
+          : 'Generate DKIM keys below');
 
   const dkimHostname = `${dkimSelector}._domainkey`;
-  const needsDkimGen = !isBrevo && !isSparkPost && provider !== 'vps' && !domain.dkimPublicKey;
+  const needsDkimGen = !isBrevo && !isSparkPost && !domain.dkimPublicKey;
 
   const dnsRecords = [
     {
@@ -224,9 +221,7 @@ export default function DomainDetailView({ onRefresh, onDeleteDomain }) {
         ? 'DKIM is automatically handled by Brevo. Add the unique mailin._domainkey TXT record from your Brevo Console Senders & Domains settings.'
         : isSparkPost
           ? 'DKIM is managed by SparkPost. Refer to your SparkPost dashboard (Configuration > Sending Domains) to copy the exact DKIM record details.'
-          : provider === 'vps'
-            ? 'DKIM is managed by Postal. Copy the exact DKIM TXT record provided in the Postal web interface.'
-            : 'DomainKeys Identified Mail — cryptographic signature to verify sender authenticity',
+          : 'DomainKeys Identified Mail — cryptographic signature to verify sender authenticity',
       verified: v?.dkim?.exists,
       liveValue: v?.dkim?.record,
       needsGeneration: needsDkimGen
@@ -628,7 +623,6 @@ export default function DomainDetailView({ onRefresh, onDeleteDomain }) {
                   <option value="azure">Azure Email Service</option>
                   <option value="brevo">Brevo</option>
                   <option value="sparkpost">SparkPost</option>
-                  <option value="vps">VPS (Postal)</option>
                   <option value="custom">Custom SMTP / Direct Sending</option>
                 </select>
               </label>

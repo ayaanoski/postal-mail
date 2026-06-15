@@ -52,7 +52,7 @@ const sleep = (milliseconds) =>
     setTimeout(resolve, milliseconds);
   });
 
-const MIN_DELAY_SECONDS = 30;
+const MIN_DELAY_SECONDS = 0;
 
 const getDelaySeconds = (delaySettings) => {
   let delay;
@@ -105,7 +105,24 @@ const updateRecipientStatus = async (campaignId, recipientId, status) => {
 const getUsageDate = () => new Date().toISOString().slice(0, 10);
 
 const reserveDomainCapacity = async (domainId) => {
+  const fs = require('fs');
+  const debugLog = (msg) => {
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    console.log(msg);
+    fs.appendFileSync('/Users/tuhin/Coding/postal-mail/backend/worker_debug.log', line);
+  };
+
   const usageDate = getUsageDate();
+  debugLog(`reserveDomainCapacity START — domainId='${domainId}' (type: ${typeof domainId}), usageDate='${usageDate}'`);
+
+  // First, check what the domain looks like BEFORE the update
+  const beforeDomain = await Domain.findById(domainId).lean();
+  if (beforeDomain) {
+    debugLog(`  BEFORE: status='${beforeDomain.status}', dailyUsage=${beforeDomain.dailyUsage}, dailyLimit=${beforeDomain.dailyLimit}, usageDate='${beforeDomain.usageDate}'`);
+  } else {
+    debugLog(`  BEFORE: Domain NOT FOUND!`);
+  }
+
   const domain = await Domain.findOneAndUpdate(
     {
       _id: domainId,
@@ -157,8 +174,16 @@ const reserveDomainCapacity = async (domainId) => {
   );
 
   if (!domain) {
+    debugLog(`  RESULT: FAILED — findOneAndUpdate returned null`);
+    // Debug: re-check domain to see current state
+    const afterDomain = await Domain.findById(domainId).lean();
+    if (afterDomain) {
+      debugLog(`  AFTER: status='${afterDomain.status}', dailyUsage=${afterDomain.dailyUsage}, dailyLimit=${afterDomain.dailyLimit}, usageDate='${afterDomain.usageDate}'`);
+    }
     throw new Error('Sending domain is disabled or has reached its daily limit');
   }
+  
+  debugLog(`  RESULT: OK — dailyUsage now ${domain.dailyUsage}/${domain.dailyLimit}`);
 };
 
 const releaseDomainCapacity = async (domainId) => {
@@ -217,6 +242,7 @@ const processEmailJob = async (job) => {
       return { recipient: recipient.email, status: 'suppressed', reason: suppressed.reason };
     }
 
+    console.log(`[Worker] DEBUG reserveDomainCapacity — domainId: '${sendingDomain.id}', type: ${typeof sendingDomain.id}`);
     await reserveDomainCapacity(sendingDomain.id);
     capacityReserved = true;
 
@@ -277,29 +303,6 @@ const processEmailJob = async (job) => {
         const userSmtpConfig = matchedConfigs[Math.floor(Math.random() * matchedConfigs.length)];
         console.log(`[Worker] Domain provider: '${domainProvider}'. Active user configs: ${userSmtpConfigs.length}. Matched configs: ${matchedConfigs.length}. Selected SMTP: '${userSmtpConfig.name}' (${userSmtpConfig.provider})`);
 
-        // If provider is 'vps' with a configured HTTP API URL, use Postal HTTP API
-        if (userSmtpConfig.provider === 'vps' && userSmtpConfig.vpsApiUrl) {
-          try {
-            const plainPass = decryptSmtpPassword(
-              userSmtpConfig.smtpPass,
-              userSmtpConfig.smtpPassIv,
-              userSmtpConfig.smtpPassTag
-            );
-            relayName = `VPS HTTP API (${userSmtpConfig.name || userSmtpConfig.vpsApiUrl})`;
-            const postalClient = createPostalClient({
-              serverUrl: userSmtpConfig.vpsApiUrl,
-              apiKey: plainPass
-            });
-            relay = {
-              sendMail: (mailOptions) => postalClient.sendMail(mailOptions)
-            };
-            isUserSmtp = true;
-            console.log(`[Worker] Using VPS Postal HTTP API: ${userSmtpConfig.vpsApiUrl}`);
-          } catch (decryptErr) {
-            console.warn(`[Worker] Failed to setup VPS HTTP API ${userSmtpConfig._id || userSmtpConfig.id}, falling back to SMTP:`, decryptErr.message);
-            // Fall through to SMTP below
-          }
-        }
 
         if (!relay) {
           try {
@@ -446,8 +449,13 @@ const processEmailJob = async (job) => {
       await updateRecipientStatus(campaignId, recipientId, 'failed');
 
       const errorMessage = error.message ? error.message.toLowerCase() : '';
-      const isHardBounce = /(user unknown|no such user|mailbox not found|invalid recipient|address rejected|does not exist|invalid address|550 5\.1\.1|550 5\.1\.0|552 5\.2\.2|mailbox full|quota exceeded|550 5\.2\.1|mailbox disabled|5\.1\.1|5\.1\.0)/i.test(errorMessage);
-      const isSoftBounce = /(tempor|try again|timeout|congestion|4\.\d+\.\d+|450|451|452)/i.test(errorMessage);
+
+      // Guard: internal/system errors should NOT suppress recipient emails.
+      // Only classify as bounce if the error is an actual SMTP delivery failure from the remote server.
+      const isInternalError = /(daily limit|disabled|no smtp config|relay|decrypt|transport|econnrefused|enotfound|cannot connect)/i.test(errorMessage);
+
+      const isHardBounce = !isInternalError && /(user unknown|no such user|mailbox not found|invalid recipient|address rejected|does not exist|invalid address|550 5\.1\.1|550 5\.1\.0|552 5\.2\.2|mailbox full|quota exceeded|550 5\.2\.1|mailbox disabled|5\.1\.1|5\.1\.0)/i.test(errorMessage);
+      const isSoftBounce = !isInternalError && /(tempor|try again|timeout|congestion|4\.\d+\.\d+|450|451|452)/i.test(errorMessage);
 
       try {
         if (isHardBounce) {
@@ -478,6 +486,10 @@ const processEmailJob = async (job) => {
         }
       } catch (supErr) {
         console.warn('[Worker] Failed to record suppression:', supErr.message);
+      }
+
+      if (isInternalError) {
+        console.warn(`[Worker] INTERNAL ERROR for ${recipient.email} — NOT suppressed (reason: ${error.message})`);
       }
     }
 

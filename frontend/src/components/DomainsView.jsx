@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 
 const buildSpfRecord = (provider) => {
-  if (provider === 'vps') return 'v=spf1 a mx include:spf.mail.mailer-us.com ~all';
   if (provider === 'sparkpost') return 'v=spf1 include:sparkpostmail.com ~all';
   if (provider === 'brevo') return 'v=spf1 include:spf.brevo.com ~all';
   if (provider === 'azure') return 'v=spf1 include:spf.smtp2go.com ~all';
@@ -17,7 +16,6 @@ export default function DomainsView({
   onAddDomain,
   onImportBrevo,
   onImportSparkpost,
-  onImportVps,
   onImportAzure,
   onDeleteDomain,
   user
@@ -42,8 +40,7 @@ export default function DomainsView({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importApiKey, setImportApiKey] = useState('');
-  const [importSource, setImportSource] = useState('brevo'); // 'brevo' or 'sparkpost' or 'vps'
-  const [importVpsUrl, setImportVpsUrl] = useState('');
+  const [importSource, setImportSource] = useState('brevo'); // 'brevo' or 'sparkpost'
   const [isImporting, setIsImporting] = useState(false);
   const [transportMode, setTransportMode] = useState('brevo');
   const [isImportingAzure, setIsImportingAzure] = useState(false);
@@ -158,11 +155,8 @@ export default function DomainsView({
         await onImportBrevo(importApiKey);
       } else if (importSource === 'sparkpost') {
         await onImportSparkpost(importApiKey);
-      } else if (importSource === 'vps') {
-        await onImportVps({ serverUrl: importVpsUrl, apiKey: importApiKey });
       }
       setImportApiKey('');
-      setImportVpsUrl('');
       setShowImportModal(false);
     } catch {
       // Handled in caller toast
@@ -451,7 +445,6 @@ export default function DomainsView({
                   <option value="azure">Azure Email Service</option>
                   <option value="brevo">Brevo</option>
                   <option value="sparkpost">SparkPost</option>
-                  <option value="vps">VPS (Postal)</option>
                   <option value="custom">Custom SMTP / Direct Sending</option>
                 </select>
               </label>
@@ -513,7 +506,7 @@ export default function DomainsView({
           <div className="flex bg-surface-secondary rounded-full p-1 border border-border-light">
             <button
               type="button"
-              onClick={() => { setImportSource('brevo'); setImportApiKey(''); setImportVpsUrl(''); }}
+              onClick={() => { setImportSource('brevo'); setImportApiKey(''); }}
               className={`flex-1 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${importSource === 'brevo'
                 ? 'bg-[#131416] text-white shadow-sm'
                 : 'text-fg-secondary hover:text-fg'
@@ -523,23 +516,13 @@ export default function DomainsView({
             </button>
             <button
               type="button"
-              onClick={() => { setImportSource('sparkpost'); setImportApiKey(''); setImportVpsUrl(''); }}
+              onClick={() => { setImportSource('sparkpost'); setImportApiKey(''); }}
               className={`flex-1 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${importSource === 'sparkpost'
                 ? 'bg-[#131416] text-white shadow-sm'
                 : 'text-fg-secondary hover:text-fg'
                 }`}
             >
               SparkPost
-            </button>
-            <button
-              type="button"
-              onClick={() => { setImportSource('vps'); setImportApiKey(''); setImportVpsUrl(''); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${importSource === 'vps'
-                ? 'bg-[#131416] text-white shadow-sm'
-                : 'text-fg-secondary hover:text-fg'
-                }`}
-            >
-              VPS (Postal)
             </button>
           </div>
 
@@ -562,7 +545,7 @@ export default function DomainsView({
                     You can generate this key in your Brevo Console under <strong>SMTP & API &gt; API Keys</strong>. It is only used to sync senders and is never saved.
                   </span>
                 </label>
-              ) : importSource === 'sparkpost' ? (
+              ) : (
                 <label className="flex flex-col gap-1.5">
                   <span className="text-xs font-bold text-fg-secondary pl-1">SparkPost API Key</span>
                   <input
@@ -579,41 +562,6 @@ export default function DomainsView({
                     Enter your SparkPost API Key. Ensure it has the <strong>Sending Domains: Read</strong> permission enabled. It is only used to sync domains and is never saved.
                   </span>
                 </label>
-              ) : (
-                <>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-bold text-fg-secondary pl-1">Postal Server URL</span>
-                    <input
-                      className="w-full h-11 px-4.5 bg-surface-secondary border border-transparent rounded-full outline-none text-sm text-fg placeholder:text-fg-muted focus:border-border focus:bg-white focus:ring-2 focus:ring-accent/5 transition-all disabled:opacity-50 font-medium"
-                      name="importVpsUrl"
-                      type="text"
-                      placeholder="https://postal.your-server.com"
-                      value={importVpsUrl}
-                      onChange={(e) => setImportVpsUrl(e.target.value)}
-                      disabled={isImporting}
-                      required
-                    />
-                    <span className="text-[10px] text-fg-muted pl-1 leading-normal mt-1">
-                      The base URL of your self-hosted Postal server.
-                    </span>
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-bold text-fg-secondary pl-1">Postal API Key</span>
-                    <input
-                      className="w-full h-11 px-4.5 bg-surface-secondary border border-transparent rounded-full outline-none text-sm text-fg placeholder:text-fg-muted focus:border-border focus:bg-white focus:ring-2 focus:ring-accent/5 transition-all disabled:opacity-50 font-medium"
-                      name="importApiKey"
-                      type="password"
-                      placeholder="Your Postal API key"
-                      value={importApiKey}
-                      onChange={(e) => setImportApiKey(e.target.value)}
-                      disabled={isImporting}
-                      required
-                    />
-                    <span className="text-[10px] text-fg-muted pl-1 leading-normal mt-1">
-                      Your Postal root API key or server API key. Used to fetch configured domains from the Postal server.
-                    </span>
-                  </label>
-                </>
               )}
             </div>
 

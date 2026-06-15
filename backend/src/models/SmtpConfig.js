@@ -14,7 +14,7 @@ const smtpConfigSchema = new mongoose.Schema(
     },
     provider: {
       type: String,
-      enum: ['azure', 'brevo', 'sparkpost', 'custom', 'vps'],
+      enum: ['azure', 'brevo', 'sparkpost', 'custom'],
       default: 'custom'
     },
     smtpHost: {
@@ -49,11 +49,6 @@ const smtpConfigSchema = new mongoose.Schema(
       type: String,
       required: true,
       select: false
-    },
-    // VPS/Postal HTTP API settings (optional — only used when provider is 'vps')
-    vpsApiUrl: {
-      type: String,
-      default: null
     },
     isActive: {
       type: Boolean,

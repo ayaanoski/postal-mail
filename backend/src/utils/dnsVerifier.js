@@ -147,9 +147,7 @@ const buildDkimDnsRecord = (selector, base64Key) => {
 };
 
 const buildSpfDnsRecord = (domain, ips, provider) => {
-  if (provider === 'vps') {
-    return `v=spf1 a mx include:spf.mail.mailer-us.com ~all`;
-  } else if (provider === 'sparkpost') {
+  if (provider === 'sparkpost') {
     return `v=spf1 include:sparkpostmail.com ~all`;
   } else if (provider === 'brevo') {
     return `v=spf1 include:spf.brevo.com ~all`;

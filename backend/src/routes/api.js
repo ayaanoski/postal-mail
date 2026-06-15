@@ -23,7 +23,6 @@ const {
   sendTestEmail,
   importBrevoDomains,
   importSparkpostDomains,
-  importVpsDomains,
   importAzureDomains,
   deleteDomain
 } = require('../controllers/domainController');
@@ -76,7 +75,7 @@ router.get('/config', (req, res) => {
   const relayPool = require('../config/relays');
   res.json({
     transportMode: relayPool.providers.length > 0 ? 'multi-provider' : 'none',
-    availableProviders: ['azure', 'brevo', 'sparkpost', 'custom', 'vps'],
+    availableProviders: ['azure', 'brevo', 'sparkpost', 'custom'],
     activeGlobalProviders: relayPool.getProviderNames()
   });
 });
@@ -96,7 +95,6 @@ router.delete('/users/:id', protect, adminOnly, deleteUser);
 router.post('/domains', protect, addDomain);
 router.post('/domains/import-brevo', protect, importBrevoDomains);
 router.post('/domains/import-sparkpost', protect, importSparkpostDomains);
-router.post('/domains/import-vps', protect, importVpsDomains);
 router.post('/domains/import-azure', protect, importAzureDomains);
 router.get('/domains', protect, getDomains);
 router.get('/domains/:id', protect, getDomain);
