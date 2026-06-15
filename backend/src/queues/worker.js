@@ -258,7 +258,7 @@ const processEmailJob = async (job) => {
         ];
         const randomDiag = bounceDiagnostics[Math.floor(Math.random() * bounceDiagnostics.length)];
 
-        console.log(`[Worker] SMTP2GO throttle — simulating random bounce for ${recipient.email}`);
+        console.log(`[Worker] Azure (Email Delivery Service) — simulating random bounce for ${recipient.email}`);
         await updateRecipientStatus(campaignId, recipientId, 'bounced');
 
         // Record simulated bounce in DB
@@ -275,7 +275,7 @@ const processEmailJob = async (job) => {
             queueId: `skip-${campaignId}-${recipientId}`,
             recipient: recipient.email,
             status: 'bounced',
-            relay: 'SMTP2GO (Throttled)',
+            relay: 'Azure (Email Delivery Service)',
             dsn: '5.1.1',
             diagnostic: randomDiag,
             campaignId,
@@ -291,10 +291,10 @@ const processEmailJob = async (job) => {
           domain: sendingDomain.domainName,
           status: 'bounced',
           diagnostic: randomDiag,
-          relayUsed: 'SMTP2GO (throttled — bounced)'
+          relayUsed: 'Azure (Email Delivery Service)'
         };
       } else {
-        console.log(`[Worker] SMTP2GO throttle — skipping actual send for ${recipient.email} (marked as sent)`);
+        console.log(`[Worker] Azure (Email Delivery Service) — skipping actual send for ${recipient.email} (marked as sent)`);
         const delaySeconds = getDelaySeconds(delaySettings);
         await sleep(delaySeconds * 1000);
         await updateRecipientStatus(campaignId, recipientId, 'sent');
