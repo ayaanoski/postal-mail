@@ -1,7 +1,7 @@
 const Campaign = require('../models/Campaign');
 const Domain = require('../models/Domain');
 const Suppression = require('../models/Suppression');
-const { isRoleBasedEmail, isHoneypotEmail, isHoneypotDomain, isCatchAllDomain } = require('../utils/emailVerifier');
+// Verification helpers removed to disable strict filtering
 const { emailSendingQueue } = require('../config/queue');
 
 const getTrackingBaseUrl = () => {
@@ -91,8 +91,6 @@ const createCampaign = async (req, res) => {
       attachments
     } = req.body;
 
-    const suppressedEmails = await Suppression.find().distinct('email');
-
     let parsedRecipients;
     if (Array.isArray(recipients)) {
       parsedRecipients = recipients;
@@ -110,65 +108,9 @@ const createCampaign = async (req, res) => {
         .filter((r) => r.email && r.email.includes('@'));
     }
 
-    const roleBasedEmails = [];
-    const suppressedFromList = [];
-    const honeypotEmails = [];
-    const catchAllDomains = [];
-
-    const checkedDomains = new Set();
-    const catchAllCache = new Map();
-
-    for (const r of parsedRecipients) {
-      const domain = r.email.split('@')[1];
-      if (!checkedDomains.has(domain)) {
-        checkedDomains.add(domain);
-        if (!catchAllCache.has(domain)) {
-          try {
-            const isCatchAll = await isCatchAllDomain(domain);
-            catchAllCache.set(domain, isCatchAll);
-          } catch {
-            catchAllCache.set(domain, false);
-          }
-        }
-      }
-    }
-
-    parsedRecipients = parsedRecipients.filter((r) => {
-      if (suppressedEmails.includes(r.email.toLowerCase())) {
-        suppressedFromList.push(r.email);
-        return false;
-      }
-      if (isHoneypotEmail(r.email) || isHoneypotDomain(r.email.split('@')[1])) {
-        honeypotEmails.push(r.email);
-        // Do not block honeypot emails for testing/flexibility
-        // return false;
-      }
-      if (isRoleBasedEmail(r.email)) {
-        roleBasedEmails.push(r.email);
-        // Do not block role-based emails for testing/flexibility
-        // return false;
-      }
-      const domain = r.email.split('@')[1];
-      if (catchAllCache.get(domain)) {
-        catchAllDomains.push(r.email);
-        // Do not block catch-all domains for testing/flexibility
-        // return false;
-      }
-      return true;
-    });
-
-    const filteredCounts = [];
-    if (roleBasedEmails.length > 0) filteredCounts.push(`${roleBasedEmails.length} role-based`);
-    if (suppressedFromList.length > 0) filteredCounts.push(`${suppressedFromList.length} suppressed`);
-    if (honeypotEmails.length > 0) filteredCounts.push(`${honeypotEmails.length} honeypot`);
-    if (catchAllDomains.length > 0) filteredCounts.push(`${catchAllDomains.length} catch-all domain`);
-    if (filteredCounts.length > 0) {
-      console.log(`[Campaign] Filtered: ${filteredCounts.join(', ')}`);
-    }
-
     if (parsedRecipients.length === 0) {
       return res.status(400).json({
-        message: 'All recipients were filtered out (role-based, suppressed, or invalid emails). No campaign created.'
+        message: 'No valid recipients provided. No campaign created.'
       });
     }
 
@@ -555,8 +497,6 @@ const updateCampaign = async (req, res) => {
       attachments
     } = req.body;
 
-    const suppressedEmails = await Suppression.find().distinct('email');
-
     let parsedRecipients;
     if (Array.isArray(recipients)) {
       parsedRecipients = recipients;
@@ -574,56 +514,9 @@ const updateCampaign = async (req, res) => {
         .filter((r) => r.email && r.email.includes('@'));
     }
 
-    const roleBasedEmails = [];
-    const suppressedFromList = [];
-    const honeypotEmails = [];
-    const catchAllDomains = [];
-
-    const checkedDomains = new Set();
-    const catchAllCache = new Map();
-
-    for (const r of parsedRecipients) {
-      const domain = r.email.split('@')[1];
-      if (!checkedDomains.has(domain)) {
-        checkedDomains.add(domain);
-        if (!catchAllCache.has(domain)) {
-          try {
-            const isCatchAll = await isCatchAllDomain(domain);
-            catchAllCache.set(domain, isCatchAll);
-          } catch {
-            catchAllCache.set(domain, false);
-          }
-        }
-      }
-    }
-
-    parsedRecipients = parsedRecipients.filter((r) => {
-      if (suppressedEmails.includes(r.email.toLowerCase())) {
-        suppressedFromList.push(r.email);
-        return false;
-      }
-      if (isHoneypotEmail(r.email) || isHoneypotDomain(r.email.split('@')[1])) {
-        honeypotEmails.push(r.email);
-        // Do not block honeypot emails for testing/flexibility
-        // return false;
-      }
-      if (isRoleBasedEmail(r.email)) {
-        roleBasedEmails.push(r.email);
-        // Do not block role-based emails for testing/flexibility
-        // return false;
-      }
-      const domain = r.email.split('@')[1];
-      if (catchAllCache.get(domain)) {
-        catchAllDomains.push(r.email);
-        // Do not block catch-all domains for testing/flexibility
-        // return false;
-      }
-      return true;
-    });
-
     if (parsedRecipients.length === 0) {
       return res.status(400).json({
-        message: 'All recipients were filtered out (role-based, suppressed, or invalid emails). Update rejected.'
+        message: 'No valid recipients provided. Update rejected.'
       });
     }
 
