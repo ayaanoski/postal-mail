@@ -106,10 +106,16 @@ const getUsageDate = () => new Date().toISOString().slice(0, 10);
 
 const reserveDomainCapacity = async (domainId) => {
   const fs = require('fs');
+  const path = require('path');
   const debugLog = (msg) => {
     const line = `[${new Date().toISOString()}] ${msg}\n`;
     console.log(msg);
-    fs.appendFileSync('/Users/tuhin/Coding/postal-mail/backend/worker_debug.log', line);
+    try {
+      const logPath = path.join(__dirname, '../../worker_debug.log');
+      fs.appendFileSync(logPath, line);
+    } catch (err) {
+      console.warn('[Worker] Failed to write to debug log:', err.message);
+    }
   };
 
   const usageDate = getUsageDate();
