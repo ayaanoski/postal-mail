@@ -1,5 +1,4 @@
 require('dotenv').config();
-require('../config/envLoader');
 
 const mongoose = require('mongoose');
 const { Worker } = require('bullmq');

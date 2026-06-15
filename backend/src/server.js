@@ -1,5 +1,4 @@
 require('dotenv').config();
-require('./config/envLoader');
 
 const cors = require('cors');
 const express = require('express');
