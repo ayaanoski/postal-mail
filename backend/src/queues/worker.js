@@ -241,12 +241,14 @@ const processEmailJob = async (job) => {
   let userTransport = null;
 
   try {
+    /*
     const suppressed = await Suppression.findOne({ email: recipient.email.toLowerCase() });
     if (suppressed) {
       console.log(`[Worker] Suppressed email ${recipient.email} — skipping (reason: ${suppressed.reason})`);
       await updateRecipientStatus(campaignId, recipientId, 'failed');
       return { recipient: recipient.email, status: 'suppressed', reason: suppressed.reason };
     }
+    */
 
     // SMTP2GO throttling: if skipSmtp flag is set, mark as "sent" or "bounced" without actually sending
     if (job.data.skipSmtp) {
