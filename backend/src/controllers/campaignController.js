@@ -22,7 +22,7 @@ const injectTrackingPixel = (htmlContent, campaignId, baseUrl) => {
   const pixel = `<img src="${pixelUrl}" width="1" height="1" alt="" />`;
   const bodyCloseIndex = processedHtml.toLowerCase().lastIndexOf('</body>');
   if (bodyCloseIndex !== -1) {
-    return processedHtml.slice(0, bodyCloseIndex) + pixel + processedHtml.slice(bodyCloseIndex);
+    return processedHtml.slice(0, bodyCloseIndex) + pixel + '</body>' + processedHtml.slice(bodyCloseIndex + 7);
   }
   return processedHtml + pixel;
 };

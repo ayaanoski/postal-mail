@@ -268,4 +268,107 @@ router.post('/fbl', express.urlencoded({ extended: true, limit: '10mb' }), async
   }
 });
 
+/**
+ * POST /track/bounce
+ * Async bounce notification endpoint for SMTP providers (SES SNS, SendGrid Event Webhook, Brevo Webhook).
+ * Accepts JSON or form-encoded payloads from various providers.
+ */
+router.post('/bounce', express.json({ limit: '5mb' }), express.urlencoded({ extended: true, limit: '5mb' }), async (req, res) => {
+  try {
+    const body = req.body;
+    let bouncedEmails = [];
+    let bounceType = 'hard';
+
+    // AWS SES SNS notification format
+    if (body.bounce || body.Bounce) {
+      const bounce = body.bounce || body.Bounce;
+      bounceType = (bounce.bounceType || bounce.bounceType || '').toLowerCase() === 'permanent' ? 'hard' : 'soft';
+      if (bounce.bouncedRecipients) {
+        bouncedEmails = bounce.bouncedRecipients.map((r) => r.emailAddress || r.emailAddress || r.recipient).filter(Boolean);
+      }
+    }
+
+    // SendGrid Event Webhook format
+    if (Array.isArray(body)) {
+      for (const event of body) {
+        if (event.event === 'bounce' || event.event === 'blocked') {
+          bounceType = event.event === 'bounce' ? 'hard' : 'soft';
+          if (event.email) bouncedEmails.push(event.email);
+        }
+        if (event.event === 'spamreport' || event.event === 'abuse') {
+          if (event.email) {
+            await Suppression.findOneAndUpdate(
+              { email: event.email.toLowerCase() },
+              { email: event.email.toLowerCase(), reason: 'complaint', diagnostic: `Provider webhook: ${event.event}` },
+              { upsert: true, new: true }
+            );
+          }
+        }
+      }
+    }
+
+    // Brevo webhook format
+    if (body.event && body.email) {
+      if (body.event === 'hard_bounce' || body.event === 'blocked') {
+        bouncedEmails.push(body.email);
+      } else if (body.event === 'soft_bounce') {
+        bouncedEmails.push(body.email);
+        bounceType = 'soft';
+      } else if (body.event === 'spam' || body.event === 'unsubscribed') {
+        await Suppression.findOneAndUpdate(
+          { email: body.email.toLowerCase() },
+          { email: body.email.toLowerCase(), reason: 'complaint', diagnostic: `Brevo webhook: ${body.event}` },
+          { upsert: true, new: true }
+        );
+      }
+    }
+
+    // Mailgun webhook format
+    if (body['event-data']) {
+      const eventData = body['event-data'];
+      const email = eventData.recipient;
+      const eventType = eventData.event;
+      if (email && (eventType === 'failed' || eventType === 'bounced')) {
+        const severity = (eventData.severity || '').toLowerCase();
+        bouncedEmails.push(email);
+        bounceType = (severity === 'temporary') ? 'soft' : 'hard';
+      }
+    }
+
+    for (const email of bouncedEmails) {
+      const normalizedEmail = email.toLowerCase().trim();
+      if (bounceType === 'hard') {
+        await Suppression.findOneAndUpdate(
+          { email: normalizedEmail },
+          { email: normalizedEmail, reason: 'bounce', diagnostic: `Async webhook bounce` },
+          { upsert: true, new: true }
+        );
+        console.log(`[BounceWebhook] Hard bounce recorded: ${normalizedEmail}`);
+      } else {
+        const existing = await Suppression.findOne({ email: normalizedEmail, reason: 'soft_bounce' });
+        const newCount = (existing?.softBounceCount || 0) + 1;
+        if (newCount >= 3) {
+          await Suppression.findOneAndUpdate(
+            { email: normalizedEmail },
+            { email: normalizedEmail, reason: 'bounce', softBounceCount: newCount, diagnostic: 'Suppressed after 3 async soft bounces' },
+            { upsert: true, new: true }
+          );
+          console.log(`[BounceWebhook] Suppressed ${normalizedEmail} after ${newCount} async soft bounces`);
+        } else {
+          await Suppression.findOneAndUpdate(
+            { email: normalizedEmail, reason: 'soft_bounce' },
+            { email: normalizedEmail, reason: 'soft_bounce', softBounceCount: newCount, diagnostic: 'Async webhook soft bounce' },
+            { upsert: true, new: true }
+          );
+        }
+      }
+    }
+
+    return res.status(200).send('OK');
+  } catch (error) {
+    console.error('[BounceWebhook] Error:', error.message);
+    return res.status(200).send('OK');
+  }
+});
+
 module.exports = router;

@@ -120,6 +120,31 @@ class RelayPool {
       console.log(`RelayPool: Added Postmark SMTP (${pmHost}:${pmPort})`);
     }
 
+    // Provider 6: Postal 1
+    const postal1Host = process.env.POSTAL1_SMTP_HOST;
+    const postal1Port = Number.parseInt(process.env.POSTAL1_SMTP_PORT || '25', 10);
+    const postal1User = process.env.POSTAL1_SMTP_USER;
+    const postal1Pass = process.env.POSTAL1_SMTP_PASS;
+
+    if (postal1Host && postal1User && postal1Pass) {
+      providers.push({
+        name: 'Postal 1',
+        transport: nodemailer.createTransport({
+          host: postal1Host,
+          port: postal1Port,
+          secure: postal1Port === 465,
+          auth: { user: postal1User, pass: postal1Pass },
+          pool: true,
+          maxConnections: 5,
+          maxMessages: 100,
+          tls: {
+            rejectUnauthorized: false
+          }
+        })
+      });
+      console.log(`RelayPool: Added Postal 1 SMTP (${postal1Host}:${postal1Port})`);
+    }
+
     this.transports = providers.map((p) => p.transport);
     this.providers = providers;
 

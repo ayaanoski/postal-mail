@@ -41,7 +41,7 @@ const htmlToPlainText = (html) => {
     .trim();
 
   if (!text || text.length < 10) {
-    text = 'Please view this email in an HTML-compatible email client.';
+    text = 'This email contains rich formatting. Some email clients may not display it correctly.';
   }
 
   return text;
@@ -333,8 +333,12 @@ const processEmailJob = async (job) => {
     // Generate plain text from HTML
     const plainText = htmlToPlainText(finalHtml);
 
-    const baseUrl = (process.env.BASE_URL || 'http://localhost:4000').replace(/\/+$/, '');
-    const unsubscribeUrl = `${baseUrl}/track/unsubscribe/${campaignId}/${recipientId}`;
+    const trackingBase = (process.env.TRACKING_DOMAIN || process.env.BASE_URL || 'http://localhost:4000').replace(/\/+$/, '');
+    const isBareIp = (hostname) => /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(hostname);
+    if (isBareIp(trackingBase.replace(/^https?:\/\//, '').split('/')[0])) {
+      console.warn(`[Worker] WARNING: Unsubscribe URL uses bare IP (${trackingBase}). Set TRACKING_DOMAIN to a proper domain with HTTPS.`);
+    }
+    const unsubscribeUrl = `${trackingBase}/track/unsubscribe/${campaignId}/${recipientId}`;
 
     const mailOptions = {
       from: {

@@ -79,6 +79,9 @@ const isHoneypotEmail = (email) => {
 };
 
 const isCatchAllDomain = async (domain) => {
+  const enabled = process.env.CATCH_ALL_CHECK_ENABLED === 'true';
+  if (!enabled) return false;
+
   try {
     const resolver = new Resolver();
     resolver.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);

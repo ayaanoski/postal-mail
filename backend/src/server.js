@@ -62,12 +62,20 @@ const startServer = async () => {
     const hostname = baseUrl.replace(/^https?:\/\//, '').split('/')[0];
     if (isBareIp(hostname)) {
       console.warn('╔══════════════════════════════════════════════════════════════════════╗');
-      console.warn('║  WARNING: TRACKING DOMAIN points to a bare IP address.             ║');
-      console.warn('║  Emails with links to raw IPs are classified as spam by Gmail,     ║');
-      console.warn('║  Outlook, and Yahoo. Set TRACKING_DOMAIN to a real domain.         ║');
+      console.warn('║  CRITICAL: TRACKING DOMAIN points to a bare IP address.            ║');
+      console.warn('║  Every email will be classified as spam by Gmail, Outlook, Yahoo.  ║');
+      console.warn('║  Set TRACKING_DOMAIN to a real domain with HTTPS.                  ║');
       console.warn('║  Example: TRACKING_DOMAIN=https://track.yourdomain.com             ║');
       console.warn('╚══════════════════════════════════════════════════════════════════════╝');
+    } else if (!hostname.includes('.')) {
+      console.warn(`[Server] WARNING: TRACKING_DOMAIN="${baseUrl}" does not look like a valid domain.`);
+    } else if (!baseUrl.startsWith('https://')) {
+      console.warn(`[Server] WARNING: TRACKING_DOMAIN="${baseUrl}" is not HTTPS. Gmail will not load tracking images over HTTP.`);
+    } else {
+      console.log(`[Server] TRACKING_DOMAIN: ${baseUrl} ✓`);
     }
+  } else {
+    console.warn('[Server] WARNING: No TRACKING_DOMAIN set. Tracking links will be broken.');
   }
 
   // One-time repair for incorrect hard bounces caused by unactivated Brevo SMTP accounts

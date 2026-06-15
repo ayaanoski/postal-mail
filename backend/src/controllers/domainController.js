@@ -537,9 +537,13 @@ const importVpsDomains = async (req, res) => {
       const { Agent } = require('undici');
       const agent = new Agent({ connect: { rejectUnauthorized: false } });
 
+      // Postal accepts BOTH header formats depending on key type.
+      // Server API keys (UUID format) → X-Server-API-Key
+      // This covers both by sending the key in both headers.
       const response = await fetch(url, {
         method: 'GET',
         headers: {
+          'X-Server-API-Key': apiKey,
           'X-API-Key': apiKey,
           'Accept': 'application/json'
         },
