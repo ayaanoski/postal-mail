@@ -9,7 +9,8 @@ export default function ComposeView({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const initialCampaign = location.state?.duplicateCampaign;
+  const isEdit = Boolean(location.state?.editCampaign);
+  const initialCampaign = location.state?.editCampaign || location.state?.duplicateCampaign;
   const initialEmails = location.state?.importedEmails;
 
   const parseEmailsToRecipients = (emails) =>
@@ -20,7 +21,7 @@ export default function ComposeView({
   );
 
   const [formData, setFormData] = useState({
-    name: initialCampaign ? `${initialCampaign.name} (Copy)` : '',
+    name: initialCampaign ? (isEdit ? initialCampaign.name : `${initialCampaign.name} (Copy)`) : '',
     subject: initialCampaign ? initialCampaign.subject : '',
     htmlContent: initialCampaign ? initialCampaign.htmlContent : `Hi {{name}},<br/><br/>I hope this message finds you well. I came across your profile and was impressed by your work at your company.<br/><br/>I wanted to share a resource that I think you'll find valuable. It covers some insights on [topic] that many professionals in your field have found useful.<br/><br/>You can check it out here: <a href="https://yourdomain.com/resource">https://yourdomain.com/resource</a><br/><br/>Let me know if you have any questions — happy to help.<br/><br/>Best regards,<br/><br/><strong>Your Name</strong><br/>Your Title<br/>Your Company`,
     recipients: initialEmails?.length > 0
@@ -410,7 +411,7 @@ export default function ComposeView({
         attachments: attachments.length > 0 ? attachments : undefined
       };
 
-      await onSaveCampaign(payload);
+      await onSaveCampaign(payload, isEdit ? initialCampaign?._id : null);
       setHasUnsavedChanges(false);
     } catch (err) {
       alert(err.message);

@@ -52,6 +52,31 @@ const wrapLinksForTracking = (htmlContent, campaignId, baseUrl) => {
   );
 };
 
+const stripTracking = (htmlContent) => {
+  if (!htmlContent) return '';
+  let stripped = htmlContent;
+  stripped = stripped.replace(/<img[^>]+src=["'][^"']+\/track\/open\/[^"']+["'][^>]*>/gi, '');
+  stripped = stripped.replace(
+    /<a\s+(?:[^>]*?\s+)?href=(["'])(.*?)\1/gi,
+    (match, quote, url) => {
+      try {
+        const decodedUrl = url.replace(/&amp;/g, '&');
+        if (decodedUrl.includes('/track/click/')) {
+          const urlObj = new URL(decodedUrl, 'http://dummy.com');
+          const originalUrl = urlObj.searchParams.get('url');
+          if (originalUrl) {
+            return match.replace(`href=${quote}${url}${quote}`, `href=${quote}${decodeURIComponent(originalUrl)}${quote}`);
+          }
+        }
+      } catch (e) {
+        console.error('[stripTracking] Error parsing URL:', url, e.message);
+      }
+      return match;
+    }
+  );
+  return stripped;
+};
+
 const createCampaign = async (req, res) => {
   try {
     const {
@@ -160,7 +185,7 @@ const createCampaign = async (req, res) => {
 
     const baseUrl = process.env.TRACKING_DOMAIN || process.env.BASE_URL || 'http://localhost:4000';
     const processedHtml = wrapLinksForTracking(
-      injectTrackingPixel(htmlContent, campaign._id.toString(), baseUrl),
+      injectTrackingPixel(stripTracking(htmlContent), campaign._id.toString(), baseUrl),
       campaign._id.toString(),
       baseUrl
     );
@@ -417,9 +442,143 @@ const deleteCampaign = async (req, res) => {
   }
 };
 
+const updateCampaign = async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+    const campaign = await Campaign.findById(campaignId);
+
+    if (!campaign) {
+      return res.status(404).json({
+        message: 'Campaign not found'
+      });
+    }
+
+    if (req.user.role !== 'Admin' && campaign.userId?.toString() !== req.user.id) {
+      return res.status(403).json({
+        message: 'You do not have permission to update this campaign'
+      });
+    }
+
+    if (campaign.status !== 'Draft') {
+      return res.status(400).json({
+        message: 'Only campaigns in Draft state can be updated'
+      });
+    }
+
+    const {
+      name,
+      subject,
+      htmlContent,
+      recipients,
+      recipientsRaw,
+      senderRotationMode,
+      selectedDomains,
+      delaySettings,
+      attachments
+    } = req.body;
+
+    const suppressedEmails = await Suppression.find().distinct('email');
+
+    let parsedRecipients;
+    if (Array.isArray(recipients)) {
+      parsedRecipients = recipients;
+    } else {
+      parsedRecipients = (recipientsRaw || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const parts = line.split(',').map((part) => part.trim());
+          const email = parts.length === 1 ? parts[0] : parts.at(-1);
+          const name = parts.length === 1 ? '' : parts.slice(0, -1).join(' ');
+          return { name, email: email.toLowerCase(), status: 'pending' };
+        })
+        .filter((r) => r.email && r.email.includes('@'));
+    }
+
+    const roleBasedEmails = [];
+    const suppressedFromList = [];
+    const honeypotEmails = [];
+    const catchAllDomains = [];
+
+    const checkedDomains = new Set();
+    const catchAllCache = new Map();
+
+    for (const r of parsedRecipients) {
+      const domain = r.email.split('@')[1];
+      if (!checkedDomains.has(domain)) {
+        checkedDomains.add(domain);
+        if (!catchAllCache.has(domain)) {
+          try {
+            const isCatchAll = await isCatchAllDomain(domain);
+            catchAllCache.set(domain, isCatchAll);
+          } catch {
+            catchAllCache.set(domain, false);
+          }
+        }
+      }
+    }
+
+    parsedRecipients = parsedRecipients.filter((r) => {
+      if (suppressedEmails.includes(r.email.toLowerCase())) {
+        suppressedFromList.push(r.email);
+        return false;
+      }
+      if (isHoneypotEmail(r.email) || isHoneypotDomain(r.email.split('@')[1])) {
+        honeypotEmails.push(r.email);
+        return false;
+      }
+      if (isRoleBasedEmail(r.email)) {
+        roleBasedEmails.push(r.email);
+        return false;
+      }
+      const domain = r.email.split('@')[1];
+      if (catchAllCache.get(domain)) {
+        catchAllDomains.push(r.email);
+        return false;
+      }
+      return true;
+    });
+
+    if (parsedRecipients.length === 0) {
+      return res.status(400).json({
+        message: 'All recipients were filtered out (role-based, suppressed, or invalid emails). Update rejected.'
+      });
+    }
+
+    const baseUrl = process.env.TRACKING_DOMAIN || process.env.BASE_URL || 'http://localhost:4000';
+    const processedHtml = wrapLinksForTracking(
+      injectTrackingPixel(stripTracking(htmlContent), campaign._id.toString(), baseUrl),
+      campaign._id.toString(),
+      baseUrl
+    );
+
+    campaign.name = name || campaign.name;
+    campaign.subject = subject || campaign.subject;
+    campaign.htmlContent = processedHtml;
+    campaign.recipients = parsedRecipients;
+    campaign.senderRotationMode = senderRotationMode || campaign.senderRotationMode;
+    campaign.selectedDomains = selectedDomains || campaign.selectedDomains;
+    campaign.delaySettings = delaySettings || campaign.delaySettings;
+    campaign.attachments = attachments || campaign.attachments;
+
+    await campaign.save();
+
+    return res.json({
+      campaign
+    });
+  } catch (error) {
+    return res.status(400).json({
+      message: 'Unable to update campaign',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createCampaign,
   getCampaigns,
   launchCampaign,
-  deleteCampaign
+  deleteCampaign,
+  updateCampaign
 };

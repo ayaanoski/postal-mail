@@ -70,3 +70,39 @@
 [2026-06-15T10:41:42.305Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
 [2026-06-15T10:41:42.348Z]   BEFORE: status='Active', dailyUsage=23, dailyLimit=2000, usageDate='2026-06-15'
 [2026-06-15T10:41:42.395Z]   RESULT: OK — dailyUsage now 24/2000
+[2026-06-15T11:13:58.384Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:13:58.433Z]   BEFORE: status='Active', dailyUsage=24, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:13:58.487Z]   RESULT: OK — dailyUsage now 25/2000
+[2026-06-15T11:14:01.535Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:01.580Z]   BEFORE: status='Active', dailyUsage=25, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:01.631Z]   RESULT: OK — dailyUsage now 26/2000
+[2026-06-15T11:14:05.058Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:05.099Z]   BEFORE: status='Active', dailyUsage=26, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:05.145Z]   RESULT: OK — dailyUsage now 27/2000
+[2026-06-15T11:14:08.342Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:08.386Z]   BEFORE: status='Active', dailyUsage=27, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:08.433Z]   RESULT: OK — dailyUsage now 28/2000
+[2026-06-15T11:14:20.979Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:21.024Z]   BEFORE: status='Active', dailyUsage=28, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:21.072Z]   RESULT: OK — dailyUsage now 29/2000
+[2026-06-15T11:14:24.934Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:24.977Z]   BEFORE: status='Active', dailyUsage=29, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:25.024Z]   RESULT: OK — dailyUsage now 30/2000
+[2026-06-15T11:14:28.086Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:28.130Z]   BEFORE: status='Active', dailyUsage=30, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:28.178Z]   RESULT: OK — dailyUsage now 31/2000
+[2026-06-15T11:14:30.912Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:30.953Z]   BEFORE: status='Active', dailyUsage=31, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:30.996Z]   RESULT: OK — dailyUsage now 32/2000
+[2026-06-15T11:14:33.738Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:33.782Z]   BEFORE: status='Active', dailyUsage=32, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:33.829Z]   RESULT: OK — dailyUsage now 33/2000
+[2026-06-15T11:14:36.715Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:36.758Z]   BEFORE: status='Active', dailyUsage=33, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:36.803Z]   RESULT: OK — dailyUsage now 34/2000
+[2026-06-15T11:14:40.069Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:40.112Z]   BEFORE: status='Active', dailyUsage=34, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:40.157Z]   RESULT: OK — dailyUsage now 35/2000
+[2026-06-15T11:14:43.981Z] reserveDomainCapacity START — domainId='6a2fb3251dfb1e84eb1e8e8e' (type: string), usageDate='2026-06-15'
+[2026-06-15T11:14:44.023Z]   BEFORE: status='Active', dailyUsage=35, dailyLimit=2000, usageDate='2026-06-15'
+[2026-06-15T11:14:44.069Z]   RESULT: OK — dailyUsage now 36/2000

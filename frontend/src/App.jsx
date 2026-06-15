@@ -5,6 +5,7 @@ import DashboardView from './components/DashboardView';
 import DomainsView from './components/DomainsView';
 import DomainDetailView from './components/DomainDetailView';
 import ComposeView from './components/ComposeView';
+import CampaignsView from './components/CampaignsView';
 import EventsView from './components/EventsView';
 import CampaignDetailView from './components/CampaignDetailView';
 import SeedsView from './components/SeedsView';
@@ -233,13 +234,21 @@ function AppContent() {
     }
   };
 
-  const handleSaveCampaign = async (campaignData) => {
+  const handleSaveCampaign = async (campaignData, campaignId) => {
     try {
-      await apiFetch('/campaigns', {
-        method: 'POST',
-        body: JSON.stringify(campaignData)
-      });
-      showToast('Campaign draft saved.');
+      if (campaignId) {
+        await apiFetch(`/campaigns/${campaignId}`, {
+          method: 'PUT',
+          body: JSON.stringify(campaignData)
+        });
+        showToast('Campaign draft updated.');
+      } else {
+        await apiFetch('/campaigns', {
+          method: 'POST',
+          body: JSON.stringify(campaignData)
+        });
+        showToast('Campaign draft saved.');
+      }
       loadDashboard();
       navigate('/');
     } catch (err) {
@@ -442,6 +451,8 @@ function AppContent() {
   // Determine activeView for navigation state in sidebar/FAB
   const activeView = location.pathname === '/'
     ? 'overview'
+    : location.pathname.startsWith('/campaigns')
+      ? 'campaigns'
     : location.pathname.startsWith('/domains')
       ? 'domains'
       : location.pathname.startsWith('/compose')
@@ -602,6 +613,18 @@ function AppContent() {
                 element={
                   <SettingsView
                     showToast={showToast}
+                  />
+                }
+              />
+              <Route
+                path="/campaigns"
+                element={
+                  <CampaignsView
+                    campaigns={campaigns}
+                    onRefresh={loadDashboard}
+                    onLaunch={handleLaunchCampaign}
+                    searchQuery={searchQuery}
+                    user={session.user}
                   />
                 }
               />

@@ -49,7 +49,8 @@ const {
   createCampaign,
   getCampaigns,
   launchCampaign,
-  deleteCampaign
+  deleteCampaign,
+  updateCampaign
 } = require('../controllers/campaignController');
 const {
   getCampaignStats,
@@ -106,6 +107,7 @@ router.post('/domains/:id/test-send', protect, sendTestEmail);
 
 router.post('/campaigns', protect, createCampaign);
 router.get('/campaigns', protect, getCampaigns);
+router.put('/campaigns/:id', protect, updateCampaign);
 router.post('/campaigns/:id/launch', protect, launchCampaign);
 router.delete('/campaigns/:id', protect, deleteCampaign);
 

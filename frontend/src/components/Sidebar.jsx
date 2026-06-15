@@ -20,6 +20,8 @@ export default function Sidebar({
 
   const activeView = location.pathname === '/'
     ? 'overview'
+    : location.pathname.startsWith('/campaigns')
+      ? 'campaigns'
     : location.pathname.startsWith('/domains')
       ? 'domains'
       : location.pathname.startsWith('/compose')
@@ -79,6 +81,16 @@ export default function Sidebar({
           <rect x="14" y="3" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      )
+    },
+    {
+      id: 'campaigns',
+      label: 'Campaigns',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 2 15 22 11 13 2 9 22 2" />
+          <line x1="11" y1="13" x2="22" y2="2" />
         </svg>
       )
     },
