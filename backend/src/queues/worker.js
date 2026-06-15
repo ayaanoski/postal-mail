@@ -238,8 +238,30 @@ const processEmailJob = async (job) => {
     };
 
     if (userId) {
-      const userSmtpConfigs = await SmtpConfig.find({ userId, isActive: true })
+      const dbConfigs = await SmtpConfig.find({ userId, isActive: true })
         .select('+smtpPass +smtpPassIv +smtpPassTag');
+
+      const userSmtpConfigs = dbConfigs.map(c => c.toObject());
+
+      // Inject hardcoded Azure / SMTP2GO config
+      const smtp2goHost = process.env.SMTP2GO_HOST || 'mail.smtp2go.com';
+      const smtp2goPort = parseInt(process.env.SMTP2GO_PORT || '2525', 10);
+      const smtp2goUser = process.env.SMTP2GO_USER;
+      const smtp2goPass = process.env.SMTP2GO_PASS;
+
+      if (smtp2goUser && smtp2goPass) {
+        userSmtpConfigs.unshift({
+          _id: 'azure-hardcoded-config-id',
+          name: 'Azure Email Service',
+          provider: 'azure',
+          smtpHost: smtp2goHost,
+          smtpPort: smtp2goPort,
+          smtpUser: smtp2goUser,
+          smtpPass: smtp2goPass,
+          isActive: true,
+          isHardcoded: true
+        });
+      }
 
       if (userSmtpConfigs && userSmtpConfigs.length > 0) {
         // Filter SMTP configs that match the sending domain's provider (brevo, sparkpost, custom)
@@ -274,18 +296,20 @@ const processEmailJob = async (job) => {
             isUserSmtp = true;
             console.log(`[Worker] Using VPS Postal HTTP API: ${userSmtpConfig.vpsApiUrl}`);
           } catch (decryptErr) {
-            console.warn(`[Worker] Failed to setup VPS HTTP API ${userSmtpConfig._id}, falling back to SMTP:`, decryptErr.message);
+            console.warn(`[Worker] Failed to setup VPS HTTP API ${userSmtpConfig._id || userSmtpConfig.id}, falling back to SMTP:`, decryptErr.message);
             // Fall through to SMTP below
           }
         }
 
         if (!relay) {
           try {
-            const plainPass = decryptSmtpPassword(
-              userSmtpConfig.smtpPass,
-              userSmtpConfig.smtpPassIv,
-              userSmtpConfig.smtpPassTag
-            );
+            const plainPass = userSmtpConfig.isHardcoded
+              ? userSmtpConfig.smtpPass
+              : decryptSmtpPassword(
+                  userSmtpConfig.smtpPass,
+                  userSmtpConfig.smtpPassIv,
+                  userSmtpConfig.smtpPassTag
+                );
             relayName = `${userSmtpConfig.provider.toUpperCase()} (${userSmtpConfig.name || userSmtpConfig.smtpHost})`;
             userTransport = relayPool.createTransportForUser({
               smtpHost: userSmtpConfig.smtpHost,
@@ -296,7 +320,7 @@ const processEmailJob = async (job) => {
             relay = userTransport;
             isUserSmtp = true;
           } catch (decryptErr) {
-            console.warn(`[Worker] Failed to decrypt SMTP config ${userSmtpConfig._id} for user ${userId}, falling back to global:`, decryptErr.message);
+            console.warn(`[Worker] Failed to decrypt SMTP config ${userSmtpConfig._id || userSmtpConfig.id} for user ${userId}, falling back to global:`, decryptErr.message);
             if (!tryAssignRelay(sendingDomain.provider)) {
               relay = relayPool.getRoundRobin();
               relayName = `Global (round-robin)`;

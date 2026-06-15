@@ -223,6 +223,19 @@ function AppContent() {
     }
   };
 
+  const handleImportAzure = async () => {
+    try {
+      const res = await apiFetch('/domains/import-azure', {
+        method: 'POST'
+      });
+      showToast(res.message || 'Domains imported from Azure.');
+      loadDomains();
+    } catch (err) {
+      showToast(err.message, 'error');
+      throw err;
+    }
+  };
+
   const handleDeleteDomain = async (domainId) => {
     try {
       await apiFetch(`/domains/${domainId}`, {
@@ -535,6 +548,7 @@ function AppContent() {
                     onImportBrevo={handleImportBrevo}
                     onImportSparkpost={handleImportSparkpost}
                     onImportVps={handleImportVps}
+                    onImportAzure={handleImportAzure}
                     onDeleteDomain={handleDeleteDomain}
                     user={session.user}
                   />

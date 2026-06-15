@@ -153,6 +153,8 @@ const buildSpfDnsRecord = (domain, ips, provider) => {
     return `v=spf1 include:sparkpostmail.com ~all`;
   } else if (provider === 'brevo') {
     return `v=spf1 include:spf.brevo.com ~all`;
+  } else if (provider === 'azure') {
+    return `v=spf1 include:spf.smtp2go.com ~all`;
   } else {
     return `v=spf1 a mx ~all`;
   }

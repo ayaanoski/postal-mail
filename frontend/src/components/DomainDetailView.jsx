@@ -5,7 +5,9 @@ import { apiFetch } from '../utils/api';
 const buildSpfRecord = (provider) => {
   if (provider === 'vps') return 'v=spf1 a mx include:spf.mail.mailer-us.com ~all';
   if (provider === 'sparkpost') return 'v=spf1 include:sparkpostmail.com ~all';
-  return 'v=spf1 include:spf.brevo.com ~all';
+  if (provider === 'brevo') return 'v=spf1 include:spf.brevo.com ~all';
+  if (provider === 'azure') return 'v=spf1 include:spf.smtp2go.com ~all';
+  return 'v=spf1 a mx ~all';
 };
 const buildDmarcRecord = (domain) => `v=DMARC1; p=none; rua=mailto:dmarc@${domain}; pct=100`;
 
@@ -207,7 +209,9 @@ export default function DomainDetailView({ onRefresh, onDeleteDomain }) {
         ? 'Sender Policy Framework — authorizes Brevo to send emails on behalf of your domain'
         : isSparkPost
           ? 'Sender Policy Framework — authorizes SparkPost to send emails on behalf of your domain'
-          : 'Sender Policy Framework — authorizes Mailer to send emails on behalf of your domain',
+          : provider === 'azure'
+            ? 'Sender Policy Framework — authorizes Azure Email Service to send emails on behalf of your domain'
+            : 'Sender Policy Framework — authorizes Mailer to send emails on behalf of your domain',
       verified: v?.spf?.exists,
       liveValue: v?.spf?.record
     },
@@ -621,6 +625,7 @@ export default function DomainDetailView({ onRefresh, onDeleteDomain }) {
                   value={editData?.provider || 'custom'}
                   onChange={(e) => setEditData((prev) => ({ ...prev, provider: e.target.value }))}
                 >
+                  <option value="azure">Azure Email Service</option>
                   <option value="brevo">Brevo</option>
                   <option value="sparkpost">SparkPost</option>
                   <option value="vps">VPS (Postal)</option>

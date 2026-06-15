@@ -277,12 +277,19 @@ export default function SettingsView({ showToast }) {
                             ? 'bg-amber-50 text-brand-orange border border-amber-100'
                             : config.provider === 'vps'
                             ? 'bg-purple-50 text-purple-700 border border-purple-100'
+                            : config.provider === 'azure'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-100'
                             : 'bg-slate-50 text-slate-700 border border-slate-100'
                         }`}>
                           {config.provider === 'brevo' && 'B'}
                           {config.provider === 'sparkpost' && 'S'}
                           {config.provider === 'vps' && 'V'}
                           {config.provider === 'custom' && 'C'}
+                          {config.provider === 'azure' && (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-blue-600">
+                              <path d="M11.95 2L2 19.46h6.77L11.95 14H17L11.95 2zM18 14.1L12.9 22H22L18 14.1z" />
+                            </svg>
+                          )}
                         </div>
                         <div>
                           <div className="text-sm font-bold text-fg flex items-center gap-2">
@@ -328,13 +335,19 @@ export default function SettingsView({ showToast }) {
 
                     {/* Card Actions */}
                     <div className="flex items-center justify-between border-t border-border-light mt-3.5 pt-3">
-                      <button
-                        type="button"
-                        onClick={() => openEditForm(config)}
-                        className="text-[11px] font-extrabold text-fg-secondary hover:text-fg transition-all cursor-pointer"
-                      >
-                        Edit settings
-                      </button>
+                      {config.isHardcoded ? (
+                        <span className="text-[9px] font-extrabold text-blue-600 uppercase tracking-wider pl-1 bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5">
+                          Managed by System
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openEditForm(config)}
+                          className="text-[11px] font-extrabold text-fg-secondary hover:text-fg transition-all cursor-pointer"
+                        >
+                          Edit settings
+                        </button>
+                      )}
 
                       <div className="flex items-center gap-3">
                         <button
@@ -345,14 +358,16 @@ export default function SettingsView({ showToast }) {
                         >
                           {testing === config.id ? 'Testing...' : 'Test'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(config.id)}
-                          disabled={deleting === config.id}
-                          className="text-[11px] font-extrabold text-red-500 hover:text-red-700 transition-all cursor-pointer disabled:opacity-50"
-                        >
-                          {deleting === config.id ? 'Deleting...' : 'Delete'}
-                        </button>
+                        {!config.isHardcoded && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(config.id)}
+                            disabled={deleting === config.id}
+                            className="text-[11px] font-extrabold text-red-500 hover:text-red-700 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {deleting === config.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

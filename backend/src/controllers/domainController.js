@@ -276,8 +276,30 @@ const sendTestEmail = async (req, res) => {
     const { decryptSmtpPassword } = require('../utils/crypto');
     const { createPostalClient } = require('../providers/postal');
 
-    const userSmtpConfigs = await SmtpConfig.find({ userId: req.user.id, isActive: true })
+    const dbConfigs = await SmtpConfig.find({ userId: req.user.id, isActive: true })
       .select('+smtpPass +smtpPassIv +smtpPassTag');
+      
+    const userSmtpConfigs = dbConfigs.map(c => c.toObject());
+
+    // Inject hardcoded Azure / SMTP2GO config
+    const smtp2goHost = process.env.SMTP2GO_HOST || 'mail.smtp2go.com';
+    const smtp2goPort = parseInt(process.env.SMTP2GO_PORT || '2525', 10);
+    const smtp2goUser = process.env.SMTP2GO_USER;
+    const smtp2goPass = process.env.SMTP2GO_PASS;
+
+    if (smtp2goUser && smtp2goPass) {
+      userSmtpConfigs.unshift({
+        _id: 'azure-hardcoded-config-id',
+        name: 'Azure Email Service',
+        provider: 'azure',
+        smtpHost: smtp2goHost,
+        smtpPort: smtp2goPort,
+        smtpUser: smtp2goUser,
+        smtpPass: smtp2goPass,
+        isActive: true,
+        isHardcoded: true
+      });
+    }
 
     let relay;
     let userTransport = null;
@@ -292,11 +314,13 @@ const sendTestEmail = async (req, res) => {
 
       const userSmtpConfig = matchedConfigs[Math.floor(Math.random() * matchedConfigs.length)];
       try {
-        const plainPass = decryptSmtpPassword(
-          userSmtpConfig.smtpPass,
-          userSmtpConfig.smtpPassIv,
-          userSmtpConfig.smtpPassTag
-        );
+        const plainPass = userSmtpConfig.isHardcoded
+          ? userSmtpConfig.smtpPass
+          : decryptSmtpPassword(
+              userSmtpConfig.smtpPass,
+              userSmtpConfig.smtpPassIv,
+              userSmtpConfig.smtpPassTag
+            );
         
         if (userSmtpConfig.provider === 'vps' && userSmtpConfig.vpsApiUrl) {
           const postalClient = createPostalClient({
@@ -316,7 +340,7 @@ const sendTestEmail = async (req, res) => {
           relay = userTransport;
         }
       } catch (decryptErr) {
-        console.warn(`[Test Send] Failed to decrypt SMTP config ${userSmtpConfig._id}, falling back to global:`, decryptErr.message);
+        console.warn(`[Test Send] Failed to decrypt SMTP config ${userSmtpConfig._id || userSmtpConfig.id}, falling back to global:`, decryptErr.message);
         relay = relayPool.getRandom();
       }
     } else {
@@ -687,6 +711,102 @@ const deleteDomain = async (req, res) => {
   }
 };
 
+const importAzureDomains = async (req, res) => {
+  try {
+    const apiKey = process.env.SMTP2GO_API_KEY;
+    if (!apiKey) {
+      return res.status(400).json({ message: 'Azure API Key (SMTP2GO_API_KEY) is not configured in backend .env' });
+    }
+
+    const response = await fetch('https://api.smtp2go.com/v3/domain/view', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Smtp2go-Api-Key': apiKey,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        api_key: apiKey
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return res.status(response.status).json({
+        message: 'Failed to fetch domains from Azure (SMTP2GO)',
+        error: errorData
+      });
+    }
+
+    const resJson = await response.json();
+    console.log('[Azure Import DEBUG] SMTP2GO Response:', JSON.stringify(resJson));
+    const domainsList = (resJson.data && resJson.data.domains) || resJson.domains || [];
+
+    if (domainsList.length === 0) {
+      return res.json({
+        message: 'No sending domains found in your Azure account.',
+        importedCount: 0
+      });
+    }
+
+    let importedCount = 0;
+
+    for (const item of domainsList) {
+      let domainName = '';
+      if (item && typeof item === 'string') {
+        domainName = item;
+      } else if (item && typeof item === 'object') {
+        if (item.domain && typeof item.domain === 'object') {
+          domainName = item.domain.fulldomain || item.domain.domain || '';
+        } else if (item.domain && typeof item.domain === 'string') {
+          domainName = item.domain;
+        } else {
+          domainName = item.domain_name || item.domainName || '';
+        }
+      }
+
+      if (typeof domainName !== 'string') {
+        domainName = String(domainName);
+      }
+
+      domainName = domainName.trim();
+      if (!domainName || !domainName.includes('.')) continue;
+
+      // Check if domain already exists for this user
+      const existing = await Domain.findOne({
+        domainName: domainName.toLowerCase(),
+        userId: req.user.id
+      });
+
+      if (!existing) {
+        // Create the domain
+        await Domain.create({
+          domainName: domainName.toLowerCase(),
+          senderEmail: `noreply@${domainName.toLowerCase()}`,
+          senderName: 'Azure Support',
+          dailyLimit: 1000,
+          status: 'Active',
+          provider: 'azure',
+          verified: true,
+          lastVerifiedAt: new Date(),
+          userId: req.user.id
+        });
+        importedCount++;
+      }
+    }
+
+    return res.json({
+      message: `Successfully imported ${importedCount} sending domain(s) from Azure.`,
+      importedCount
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Unable to import domains from Azure',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   addDomain,
   getDomains,
@@ -698,5 +818,6 @@ module.exports = {
   importBrevoDomains,
   importSparkpostDomains,
   importVpsDomains,
+  importAzureDomains,
   deleteDomain
 };

@@ -11,31 +11,55 @@ const getSmtpConfig = async (req, res) => {
     const configs = await SmtpConfig.find({ userId: req.user.id })
       .select('+smtpPass +smtpPassIv +smtpPassTag');
 
+    const formattedConfigs = configs.map(config => {
+      let plainPass = '••••••••';
+      try {
+        plainPass = decryptSmtpPassword(config.smtpPass, config.smtpPassIv, config.smtpPassTag);
+      } catch (decErr) {
+        console.warn('Failed to decrypt password for config:', config._id, decErr.message);
+      }
+      return {
+        id: config._id,
+        name: config.name || config.smtpUser || `${config.provider} (${config.smtpHost})`,
+        provider: config.provider,
+        smtpHost: config.smtpHost,
+        smtpPort: config.smtpPort,
+        smtpUser: config.smtpUser,
+        smtpPass: plainPass,
+        vpsApiUrl: config.vpsApiUrl || null,
+        isActive: config.isActive,
+        lastTestedAt: config.lastTestedAt,
+        lastTestResult: config.lastTestResult,
+        createdAt: config.createdAt,
+        updatedAt: config.updatedAt
+      };
+    });
+
+    // Inject hardcoded Azure / SMTP2GO configuration
+    const smtp2goHost = process.env.SMTP2GO_HOST || 'mail.smtp2go.com';
+    const smtp2goPort = parseInt(process.env.SMTP2GO_PORT || '2525', 10);
+    const smtp2goUser = process.env.SMTP2GO_USER || 'azure-default-user';
+
+    formattedConfigs.unshift({
+      id: 'azure-hardcoded-config-id',
+      name: 'Azure Email Service',
+      provider: 'azure',
+      smtpHost: smtp2goHost,
+      smtpPort: smtp2goPort,
+      smtpUser: smtp2goUser,
+      smtpPass: '••••••••',
+      vpsApiUrl: null,
+      isActive: true,
+      isHardcoded: true,
+      lastTestedAt: new Date(),
+      lastTestResult: 'success',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
     return res.json({
-      configs: configs.map(config => {
-        let plainPass = '••••••••';
-        try {
-          plainPass = decryptSmtpPassword(config.smtpPass, config.smtpPassIv, config.smtpPassTag);
-        } catch (decErr) {
-          console.warn('Failed to decrypt password for config:', config._id, decErr.message);
-        }
-        return {
-          id: config._id,
-          name: config.name || config.smtpUser || `${config.provider} (${config.smtpHost})`,
-          provider: config.provider,
-          smtpHost: config.smtpHost,
-          smtpPort: config.smtpPort,
-          smtpUser: config.smtpUser,
-          smtpPass: plainPass,
-          vpsApiUrl: config.vpsApiUrl || null,
-          isActive: config.isActive,
-          lastTestedAt: config.lastTestedAt,
-          lastTestResult: config.lastTestResult,
-          createdAt: config.createdAt,
-          updatedAt: config.updatedAt
-        };
-      }),
-      usingGlobal: !configs.some(c => c.isActive)
+      configs: formattedConfigs,
+      usingGlobal: false
     });
   } catch (error) {
     return res.status(500).json({
@@ -102,6 +126,9 @@ const createSmtpConfig = async (req, res) => {
 const updateSmtpConfig = async (req, res) => {
   try {
     const { id } = req.params;
+    if (id === 'azure-hardcoded-config-id') {
+      return res.status(403).json({ message: 'Cannot modify system-hardcoded configuration' });
+    }
     const { name, provider, smtpHost, smtpPort, smtpUser, smtpPass, isActive, vpsApiUrl } = req.body;
 
     const existing = await SmtpConfig.findOne({ _id: id, userId: req.user.id });
@@ -166,6 +193,9 @@ const updateSmtpConfig = async (req, res) => {
 const deleteSmtpConfig = async (req, res) => {
   try {
     const { id } = req.params;
+    if (id === 'azure-hardcoded-config-id') {
+      return res.status(403).json({ message: 'Cannot delete system-hardcoded configuration' });
+    }
     const result = await SmtpConfig.findOneAndDelete({ _id: id, userId: req.user.id });
 
     if (!result) {
@@ -189,8 +219,16 @@ const testSmtpConnection = async (req, res) => {
   try {
     let { id, smtpHost, smtpPort, smtpUser, smtpPass, provider, vpsApiUrl } = req.body;
 
-    // If id is provided or password not provided and it's a saved config
-    if (id && (!smtpPass || smtpPass === '••••••••')) {
+    if (id === 'azure-hardcoded-config-id') {
+      smtpHost = process.env.SMTP2GO_HOST || 'mail.smtp2go.com';
+      smtpPort = parseInt(process.env.SMTP2GO_PORT || '2525', 10);
+      smtpUser = process.env.SMTP2GO_USER;
+      smtpPass = process.env.SMTP2GO_PASS;
+      provider = 'azure';
+      if (!smtpUser || !smtpPass) {
+        return res.status(400).json({ message: 'Azure Email Service credentials are not set in backend .env' });
+      }
+    } else if (id && (!smtpPass || smtpPass === '••••••••')) {
       const stored = await SmtpConfig.findOne({ _id: id, userId: req.user.id })
         .select('+smtpPass +smtpPassIv +smtpPassTag');
 
@@ -277,7 +315,7 @@ const testSmtpConnection = async (req, res) => {
     await transport.verify();
     transport.close();
 
-    if (id) {
+    if (id && id !== 'azure-hardcoded-config-id') {
       await SmtpConfig.findOneAndUpdate(
         { _id: id, userId: req.user.id },
         { lastTestedAt: new Date(), lastTestResult: 'success' }
@@ -286,7 +324,7 @@ const testSmtpConnection = async (req, res) => {
 
     return res.json({ message: 'SMTP connection successful', result: 'success' });
   } catch (error) {
-    if (req.body.id) {
+    if (req.body.id && req.body.id !== 'azure-hardcoded-config-id') {
       await SmtpConfig.findOneAndUpdate(
         { _id: req.body.id, userId: req.user.id },
         { lastTestedAt: new Date(), lastTestResult: 'failed' }
