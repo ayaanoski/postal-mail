@@ -182,7 +182,7 @@ const reserveDomainCapacity = async (domainId) => {
     }
     throw new Error('Sending domain is disabled or has reached its daily limit');
   }
-  
+
   debugLog(`  RESULT: OK — dailyUsage now ${domain.dailyUsage}/${domain.dailyLimit}`);
 };
 
@@ -345,7 +345,7 @@ const processEmailJob = async (job) => {
                         if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
                           links.push(decoded);
                         }
-                      } catch (_) {}
+                      } catch (_) { }
                     }
 
                     if (links.length > 0) {
@@ -381,7 +381,7 @@ const processEmailJob = async (job) => {
           recipient: recipient.email,
           domain: sendingDomain.domainName,
           status: 'sent',
-          relayUsed: 'SMTP2GO (throttled — skipped)'
+          relayUsed: 'Azure (Email Delivery Service)'
         };
       }
     }
@@ -453,10 +453,10 @@ const processEmailJob = async (job) => {
             const plainPass = userSmtpConfig.isHardcoded
               ? userSmtpConfig.smtpPass
               : decryptSmtpPassword(
-                  userSmtpConfig.smtpPass,
-                  userSmtpConfig.smtpPassIv,
-                  userSmtpConfig.smtpPassTag
-                );
+                userSmtpConfig.smtpPass,
+                userSmtpConfig.smtpPassIv,
+                userSmtpConfig.smtpPassTag
+              );
             relayName = `${userSmtpConfig.provider.toUpperCase()} (${userSmtpConfig.name || userSmtpConfig.smtpHost})`;
             userTransport = relayPool.createTransportForUser({
               smtpHost: userSmtpConfig.smtpHost,
@@ -579,7 +579,7 @@ const processEmailJob = async (job) => {
   } catch (error) {
     // Close user transport on error too
     if (userTransport) {
-      try { userTransport.close(); } catch (_) {}
+      try { userTransport.close(); } catch (_) { }
     }
 
     if (capacityReserved && !deliveryAccepted) {

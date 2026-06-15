@@ -89,7 +89,7 @@ const addDomain = async (req, res) => {
       const spfRecord = buildSpfDnsRecord(domainName, ips, 'azure');
       const dmarcRecord = buildDmarcDnsRecord(domainName);
       const dkimRecord = buildDkimDnsRecord(selector, base64Key);
-      
+
       const mockResult = {
         passed: true,
         spf: { exists: true, record: spfRecord },
@@ -102,7 +102,7 @@ const addDomain = async (req, res) => {
         lastVerifiedAt: new Date(),
         verificationDetails: mockResult,
         status: 'Active'
-      }).catch(() => {});
+      }).catch(() => { });
     } else {
       verifyDomain(domainName, selector, base64Key).then((result) => {
         Domain.findByIdAndUpdate(domain._id, {
@@ -110,7 +110,7 @@ const addDomain = async (req, res) => {
           lastVerifiedAt: new Date(),
           verificationDetails: result,
           status: result.passed ? 'Active' : 'Pending Verification'
-        }).catch(() => {});
+        }).catch(() => { });
       });
     }
 
@@ -334,7 +334,7 @@ const sendTestEmail = async (req, res) => {
 
     const dbConfigs = await SmtpConfig.find({ userId: req.user.id, isActive: true })
       .select('+smtpPass +smtpPassIv +smtpPassTag');
-      
+
     const userSmtpConfigs = dbConfigs.map(c => c.toObject());
 
     // Inject hardcoded Azure / SMTP2GO config
@@ -373,11 +373,11 @@ const sendTestEmail = async (req, res) => {
         const plainPass = userSmtpConfig.isHardcoded
           ? userSmtpConfig.smtpPass
           : decryptSmtpPassword(
-              userSmtpConfig.smtpPass,
-              userSmtpConfig.smtpPassIv,
-              userSmtpConfig.smtpPassTag
-            );
-        
+            userSmtpConfig.smtpPass,
+            userSmtpConfig.smtpPassIv,
+            userSmtpConfig.smtpPassTag
+          );
+
         userTransport = relayPool.createTransportForUser({
           smtpHost: userSmtpConfig.smtpHost,
           smtpPort: userSmtpConfig.smtpPort,
@@ -403,7 +403,7 @@ const sendTestEmail = async (req, res) => {
     await relay.sendMail(mailOpts);
 
     if (userTransport) {
-      try { userTransport.close(); } catch (_) {}
+      try { userTransport.close(); } catch (_) { }
     }
 
     return res.json({
@@ -451,7 +451,7 @@ const importBrevoDomains = async (req, res) => {
 
     const data = await response.json();
     const senders = data.senders || [];
-    
+
     // Filter active/verified senders
     const activeSenders = senders.filter(s => s.active);
 
@@ -619,7 +619,7 @@ const importAzureDomains = async (req, res) => {
   try {
     const apiKey = process.env.SMTP2GO_API_KEY;
     if (!apiKey) {
-      return res.status(400).json({ message: 'Azure API Key (SMTP2GO_API_KEY) is not configured in backend .env' });
+      return res.status(400).json({ message: 'Azure API Key is not configured in backend .env' });
     }
 
     const response = await fetch('https://api.smtp2go.com/v3/domain/view', {
@@ -637,13 +637,13 @@ const importAzureDomains = async (req, res) => {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       return res.status(response.status).json({
-        message: 'Failed to fetch domains from Azure (SMTP2GO)',
+        message: 'Failed to fetch domains from Azure ',
         error: errorData
       });
     }
 
     const resJson = await response.json();
-    console.log('[Azure Import DEBUG] SMTP2GO Response:', JSON.stringify(resJson));
+    console.log('[Azure Import DEBUG] Response:', JSON.stringify(resJson));
     const domainsList = (resJson.data && resJson.data.domains) || resJson.domains || [];
 
     if (domainsList.length === 0) {

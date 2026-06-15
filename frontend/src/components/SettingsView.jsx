@@ -190,8 +190,8 @@ export default function SettingsView({ showToast }) {
 
       {/* Status Banner */}
       <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl border ${usingGlobal
-          ? 'bg-amber-50 border-amber-200 text-amber-800'
-          : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+        ? 'bg-amber-50 border-amber-200 text-amber-800'
+        : 'bg-emerald-50 border-emerald-200 text-emerald-800'
         }`}>
         <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${usingGlobal ? 'bg-amber-400' : 'bg-emerald-500'
           }`} />
@@ -250,22 +250,20 @@ export default function SettingsView({ showToast }) {
                 return (
                   <div
                     key={config.id}
-                    className={`bg-white border rounded-2xl p-4.5 transition-all shadow-sm ${
-                      isSelected ? 'border-fg ring-2 ring-accent/5' : 'border-border-light hover:border-fg-muted'
-                    }`}
+                    className={`bg-white border rounded-2xl p-4.5 transition-all shadow-sm ${isSelected ? 'border-fg ring-2 ring-accent/5' : 'border-border-light hover:border-fg-muted'
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
                         {/* Icon mapping */}
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${
-                          config.provider === 'brevo'
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${config.provider === 'brevo'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                             : config.provider === 'sparkpost'
-                            ? 'bg-amber-50 text-brand-orange border border-amber-100'
-                            : config.provider === 'azure'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-100'
-                            : 'bg-slate-50 text-slate-700 border border-slate-100'
-                        }`}>
+                              ? 'bg-amber-50 text-brand-orange border border-amber-100'
+                              : config.provider === 'azure'
+                                ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                : 'bg-slate-50 text-slate-700 border border-slate-100'
+                          }`}>
                           {config.provider === 'brevo' && 'B'}
                           {config.provider === 'sparkpost' && 'S'}
                           {config.provider === 'custom' && 'C'}
@@ -278,17 +276,16 @@ export default function SettingsView({ showToast }) {
                         <div>
                           <div className="text-sm font-bold text-fg flex items-center gap-2">
                             {config.name}
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                              config.isActive
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${config.isActive
                                 ? 'bg-brand-lime-muted text-fg'
                                 : 'bg-surface-secondary text-fg-muted'
-                            }`}>
+                              }`}>
                               {config.isActive ? 'Active' : 'Disabled'}
                             </span>
                           </div>
-                          <div className="text-xs font-semibold text-fg-secondary mt-0.5">
+                          {/* <div className="text-xs font-semibold text-fg-secondary mt-0.5">
                             {config.smtpUser} • {config.smtpHost}:{config.smtpPort}
-                          </div>
+                          </div> */}
                         </div>
                       </div>
                     </div>
@@ -296,9 +293,8 @@ export default function SettingsView({ showToast }) {
                     {/* Inline last tested status */}
                     {config.lastTestedAt && (
                       <div className="text-[10px] text-fg-muted font-bold mt-3 flex items-center gap-1.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          config.lastTestResult === 'success' ? 'bg-emerald-500' : 'bg-red-500'
-                        }`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${config.lastTestResult === 'success' ? 'bg-emerald-500' : 'bg-red-500'
+                          }`} />
                         Tested: {new Date(config.lastTestedAt).toLocaleDateString()} —{' '}
                         <span className={config.lastTestResult === 'success' ? 'text-emerald-600' : 'text-red-500'}>
                           {config.lastTestResult === 'success' ? 'Passed' : 'Failed'}
@@ -308,11 +304,10 @@ export default function SettingsView({ showToast }) {
 
                     {/* Test Result under specific config card */}
                     {testResult && testResult.target === config.id && (
-                      <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-bold border ${
-                        testResult.status === 'success'
+                      <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-bold border ${testResult.status === 'success'
                           ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                           : 'bg-red-50 border-red-200 text-red-700'
-                      }`}>
+                        }`}>
                         {testResult.message}
                       </div>
                     )}
@@ -413,11 +408,10 @@ export default function SettingsView({ showToast }) {
                         key={prov.id}
                         type="button"
                         onClick={() => handleProviderChange(prov.id)}
-                        className={`h-11 rounded-full text-xs font-extrabold border transition-all cursor-pointer ${
-                          provider === prov.id
+                        className={`h-11 rounded-full text-xs font-extrabold border transition-all cursor-pointer ${provider === prov.id
                             ? 'bg-[#131416] text-white border-fg shadow-md'
                             : 'bg-white text-fg-secondary border-border-light hover:bg-surface-secondary'
-                        }`}
+                          }`}
                       >
                         {prov.label}
                       </button>
@@ -459,9 +453,8 @@ export default function SettingsView({ showToast }) {
                 <label className="flex flex-col gap-1.5">
                   <span className="text-xs font-bold text-fg-secondary pl-1">SMTP Username</span>
                   <input
-                    className={`w-full h-11 px-4.5 bg-surface-secondary border border-transparent rounded-full outline-none text-sm text-fg placeholder:text-fg-muted focus:border-border focus:bg-white focus:ring-2 focus:ring-accent/5 transition-all font-medium ${
-                      provider === 'sparkpost' ? 'opacity-70 cursor-not-allowed' : ''
-                    }`}
+                    className={`w-full h-11 px-4.5 bg-surface-secondary border border-transparent rounded-full outline-none text-sm text-fg placeholder:text-fg-muted focus:border-border focus:bg-white focus:ring-2 focus:ring-accent/5 transition-all font-medium ${provider === 'sparkpost' ? 'opacity-70 cursor-not-allowed' : ''
+                      }`}
                     type="text"
                     placeholder="your-username"
                     value={smtpUser}
@@ -532,8 +525,8 @@ export default function SettingsView({ showToast }) {
                 {/* Test Connection Form Results */}
                 {testResult && testResult.target === 'form' && (
                   <div className={`flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs font-bold border ${testResult.status === 'success'
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                      : 'bg-red-50 border-red-200 text-red-700'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : 'bg-red-50 border-red-200 text-red-700'
                     }`}>
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${testResult.status === 'success' ? 'bg-emerald-500' : 'bg-red-500'
                       }`} />
