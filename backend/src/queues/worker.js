@@ -9,7 +9,6 @@ const relayPool = require('../config/relays');
 const Campaign = require('../models/Campaign');
 const Domain = require('../models/Domain');
 const SmtpConfig = require('../models/SmtpConfig');
-const Suppression = require('../models/Suppression');
 const { decryptSmtpPassword } = require('../utils/crypto');
 const { createPostalClient } = require('../providers/postal');
 
@@ -241,14 +240,7 @@ const processEmailJob = async (job) => {
   let userTransport = null;
 
   try {
-    /*
-    const suppressed = await Suppression.findOne({ email: recipient.email.toLowerCase() });
-    if (suppressed) {
-      console.log(`[Worker] Suppressed email ${recipient.email} — skipping (reason: ${suppressed.reason})`);
-      await updateRecipientStatus(campaignId, recipientId, 'failed');
-      return { recipient: recipient.email, status: 'suppressed', reason: suppressed.reason };
-    }
-    */
+
 
     // SMTP2GO throttling: if skipSmtp flag is set, mark as "sent" or "bounced" without actually sending
     if (job.data.skipSmtp) {
@@ -271,12 +263,6 @@ const processEmailJob = async (job) => {
 
         // Record simulated bounce in DB
         try {
-          await Suppression.findOneAndUpdate(
-            { email: recipient.email.toLowerCase() },
-            { email: recipient.email.toLowerCase(), reason: 'bounce', campaignId, diagnostic: randomDiag },
-            { upsert: true, new: true }
-          );
-
           const DeliveryEvent = require('../models/DeliveryEvent');
           await DeliveryEvent.create({
             timestamp: new Date(),
@@ -602,46 +588,17 @@ const processEmailJob = async (job) => {
 
       const errorMessage = error.message ? error.message.toLowerCase() : '';
 
-      // Guard: internal/system errors should NOT suppress recipient emails.
+      // Guard: internal/system errors should NOT fail recipient emails.
       // Only classify as bounce if the error is an actual SMTP delivery failure from the remote server.
       const isInternalError = /(daily limit|disabled|no smtp config|relay|decrypt|transport|econnrefused|enotfound|cannot connect)/i.test(errorMessage);
 
       const isHardBounce = !isInternalError && /(user unknown|no such user|mailbox not found|invalid recipient|address rejected|does not exist|invalid address|550 5\.1\.1|550 5\.1\.0|552 5\.2\.2|mailbox full|quota exceeded|550 5\.2\.1|mailbox disabled|5\.1\.1|5\.1\.0)/i.test(errorMessage);
       const isSoftBounce = !isInternalError && /(tempor|try again|timeout|congestion|4\.\d+\.\d+|450|451|452)/i.test(errorMessage);
 
-      try {
-        if (isHardBounce) {
-          await Suppression.findOneAndUpdate(
-            { email: recipient.email.toLowerCase() },
-            { email: recipient.email.toLowerCase(), reason: 'bounce', campaignId, diagnostic: error.message.substring(0, 500) },
-            { upsert: true, new: true }
-          );
-          console.log(`[Worker] Added ${recipient.email} to suppression list (hard bounce)`);
-        } else if (isSoftBounce) {
-          const existing = await Suppression.findOne({ email: recipient.email.toLowerCase(), reason: 'soft_bounce' });
-          const newCount = (existing?.softBounceCount || 0) + 1;
-          if (newCount >= SOFT_BOUNCE_LIMIT) {
-            await Suppression.findOneAndUpdate(
-              { email: recipient.email.toLowerCase() },
-              { email: recipient.email.toLowerCase(), reason: 'bounce', softBounceCount: newCount, campaignId, diagnostic: `Suppressed after ${newCount} soft bounces` },
-              { upsert: true, new: true }
-            );
-            console.log(`[Worker] Added ${recipient.email} to suppression list (${newCount} consecutive soft bounces)`);
-          } else {
-            await Suppression.findOneAndUpdate(
-              { email: recipient.email.toLowerCase(), reason: 'soft_bounce' },
-              { email: recipient.email.toLowerCase(), reason: 'soft_bounce', softBounceCount: newCount, campaignId, diagnostic: error.message.substring(0, 200) },
-              { upsert: true, new: true }
-            );
-            console.log(`[Worker] Soft bounce #${newCount} for ${recipient.email}`);
-          }
-        }
-      } catch (supErr) {
-        console.warn('[Worker] Failed to record suppression:', supErr.message);
-      }
+
 
       if (isInternalError) {
-        console.warn(`[Worker] INTERNAL ERROR for ${recipient.email} — NOT suppressed (reason: ${error.message})`);
+        console.warn(`[Worker] INTERNAL ERROR for ${recipient.email} — NOT failed (reason: ${error.message})`);
       }
     }
 

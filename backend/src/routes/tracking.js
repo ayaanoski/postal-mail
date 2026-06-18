@@ -1,7 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const Tracking = require('../models/Tracking');
-const Suppression = require('../models/Suppression');
 
 const router = express.Router();
 
@@ -126,21 +125,7 @@ router.all('/unsubscribe/:campaignId/:recipientId', async (req, res) => {
     console.error('[Tracking] Error logging unsubscribe event:', error.message);
   }
 
-  // Record suppression for unsubscribe
-  if (mongoose.Types.ObjectId.isValid(campaignId) && mongoose.Types.ObjectId.isValid(recipientId)) {
-    try {
-      const Campaign = mongoose.model('Campaign');
-      const campaign = await Campaign.findById(campaignId);
-      const recipient = campaign?.recipients?.id(recipientId);
-      if (recipient?.email) {
-        await Suppression.findOneAndUpdate(
-          { email: recipient.email.toLowerCase() },
-          { email: recipient.email.toLowerCase(), reason: 'unsubscribe', campaignId },
-          { upsert: true, new: true }
-        );
-      }
-    } catch (_) {}
-  }
+
 
   // If one-click unsubscribe request (POST), respond with 200 OK per RFC 8058 spec
   if (req.method === 'POST') {
@@ -253,11 +238,6 @@ router.post('/fbl', express.urlencoded({ extended: true, limit: '10mb' }), async
     }
 
     if (complaintEmail) {
-      await Suppression.findOneAndUpdate(
-        { email: complaintEmail },
-        { email: complaintEmail, reason: 'complaint', diagnostic: `FBL: ${JSON.stringify(rawBody).substring(0, 500)}` },
-        { upsert: true, new: true }
-      );
       console.log(`[FBL] Recorded abuse complaint for ${complaintEmail}`);
     }
 
@@ -296,13 +276,7 @@ router.post('/bounce', express.json({ limit: '5mb' }), express.urlencoded({ exte
           if (event.email) bouncedEmails.push(event.email);
         }
         if (event.event === 'spamreport' || event.event === 'abuse') {
-          if (event.email) {
-            await Suppression.findOneAndUpdate(
-              { email: event.email.toLowerCase() },
-              { email: event.email.toLowerCase(), reason: 'complaint', diagnostic: `Provider webhook: ${event.event}` },
-              { upsert: true, new: true }
-            );
-          }
+          // Do nothing
         }
       }
     }
@@ -315,11 +289,7 @@ router.post('/bounce', express.json({ limit: '5mb' }), express.urlencoded({ exte
         bouncedEmails.push(body.email);
         bounceType = 'soft';
       } else if (body.event === 'spam' || body.event === 'unsubscribed') {
-        await Suppression.findOneAndUpdate(
-          { email: body.email.toLowerCase() },
-          { email: body.email.toLowerCase(), reason: 'complaint', diagnostic: `Brevo webhook: ${body.event}` },
-          { upsert: true, new: true }
-        );
+        // Do nothing
       }
     }
 
@@ -338,29 +308,7 @@ router.post('/bounce', express.json({ limit: '5mb' }), express.urlencoded({ exte
     for (const email of bouncedEmails) {
       const normalizedEmail = email.toLowerCase().trim();
       if (bounceType === 'hard') {
-        await Suppression.findOneAndUpdate(
-          { email: normalizedEmail },
-          { email: normalizedEmail, reason: 'bounce', diagnostic: `Async webhook bounce` },
-          { upsert: true, new: true }
-        );
         console.log(`[BounceWebhook] Hard bounce recorded: ${normalizedEmail}`);
-      } else {
-        const existing = await Suppression.findOne({ email: normalizedEmail, reason: 'soft_bounce' });
-        const newCount = (existing?.softBounceCount || 0) + 1;
-        if (newCount >= 3) {
-          await Suppression.findOneAndUpdate(
-            { email: normalizedEmail },
-            { email: normalizedEmail, reason: 'bounce', softBounceCount: newCount, diagnostic: 'Suppressed after 3 async soft bounces' },
-            { upsert: true, new: true }
-          );
-          console.log(`[BounceWebhook] Suppressed ${normalizedEmail} after ${newCount} async soft bounces`);
-        } else {
-          await Suppression.findOneAndUpdate(
-            { email: normalizedEmail, reason: 'soft_bounce' },
-            { email: normalizedEmail, reason: 'soft_bounce', softBounceCount: newCount, diagnostic: 'Async webhook soft bounce' },
-            { upsert: true, new: true }
-          );
-        }
       }
     }
 

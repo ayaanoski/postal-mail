@@ -202,28 +202,10 @@ const startServer = async () => {
       try {
         const Campaign = require('./models/Campaign');
         const Domain = require('./models/Domain');
-        const Suppression = require('./models/Suppression');
 
         const bounceType = categorizeBounce(event.dsn, event.diagnostic);
         const recipientEmail = event.recipient || '';
         console.log(`[BounceHandler] ${bounceType.toUpperCase()} bounce: ${recipientEmail} (DSN: ${event.dsn})`);
-
-        if (bounceType === 'hard' && recipientEmail) {
-          try {
-            await Suppression.findOneAndUpdate(
-              { email: recipientEmail.toLowerCase() },
-              {
-                email: recipientEmail.toLowerCase(),
-                reason: 'bounce',
-                campaignId: event.campaignId,
-                diagnostic: event.diagnostic ? event.diagnostic.substring(0, 500) : ''
-              },
-              { upsert: true, new: true }
-            );
-          } catch (supErr) {
-            console.warn('[BounceHandler] Failed to record suppression:', supErr.message);
-          }
-        }
 
         // Update campaign recipient status
         const updatedCampaign = await Campaign.findOneAndUpdate(
@@ -263,18 +245,6 @@ const startServer = async () => {
       }
     }
   });
-
-  // In-memory set for fast lookup (rebuilt from DB on restart)
-  const suppressedEmails = new Set();
-  try {
-    const Suppression = require('./models/Suppression');
-    const allSuppressed = await Suppression.find().select('email');
-    allSuppressed.forEach((s) => suppressedEmails.add(s.email));
-    console.log(`[Server] Loaded ${suppressedEmails.size} suppressed emails into memory`);
-  } catch (_) {}
-
-  // Expose suppressed set to eventController for clearance on flush/clear
-  parser.suppressedEmails = suppressedEmails;
 
   const shutdown = async () => {
     parser.stop();

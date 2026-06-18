@@ -1,6 +1,5 @@
 const Campaign = require('../models/Campaign');
 const Domain = require('../models/Domain');
-const Suppression = require('../models/Suppression');
 // Verification helpers removed to disable strict filtering
 const { emailSendingQueue } = require('../config/queue');
 

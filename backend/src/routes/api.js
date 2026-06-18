@@ -172,32 +172,5 @@ router.put('/smtp-config/:id', protect, updateSmtpConfig);
 router.delete('/smtp-config/:id', protect, deleteSmtpConfig);
 router.post('/smtp-config/test', protect, testSmtpConnection);
 
-// Suppression list
-router.get('/suppressions', protect, async (req, res) => {
-  try {
-    const Suppression = require('../models/Suppression');
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
-    const skip = (page - 1) * limit;
-    const [items, total] = await Promise.all([
-      Suppression.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Suppression.countDocuments()
-    ]);
-    return res.json({ suppressions: items, total, page, pages: Math.ceil(total / limit) });
-  } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch suppressions', error: error.message });
-  }
-});
-
-router.delete('/suppressions/:id', protect, adminOnly, async (req, res) => {
-  try {
-    const Suppression = require('../models/Suppression');
-    await Suppression.findByIdAndDelete(req.params.id);
-    return res.json({ message: 'Suppression removed successfully' });
-  } catch (error) {
-    return res.status(500).json({ message: 'Failed to remove suppression', error: error.message });
-  }
-});
-
 module.exports = router;
 

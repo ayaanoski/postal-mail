@@ -85,18 +85,7 @@ const runSimulation = async (campaignId, recipientId, recipientEmail, htmlConten
         sender: sendingDomain.senderEmail
       });
 
-      // 3. Record bounce suppression
-      const Suppression = mongoose.model('Suppression');
-      await Suppression.findOneAndUpdate(
-        { email: recipientEmail.toLowerCase() },
-        {
-          email: recipientEmail.toLowerCase(),
-          reason: 'bounce',
-          campaignId,
-          diagnostic
-        },
-        { upsert: true }
-      );
+
     } catch (err) {
       console.error('[Simulation] Error recording simulated bounce:', err.message);
     }
