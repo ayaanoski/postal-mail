@@ -453,21 +453,21 @@ function AppContent() {
     ? 'overview'
     : location.pathname.startsWith('/campaigns')
       ? 'campaigns'
-    : location.pathname.startsWith('/domains')
-      ? 'domains'
-      : location.pathname.startsWith('/compose')
-        ? 'compose'
-        : location.pathname.startsWith('/events')
-          ? 'events'
-          : location.pathname.startsWith('/seeds')
-            ? 'seeds'
-            : location.pathname.startsWith('/employees')
-              ? 'employees'
-              : location.pathname.startsWith('/rules')
-                ? 'rules'
-                : location.pathname.startsWith('/settings')
-                  ? 'settings'
-                  : 'overview';
+      : location.pathname.startsWith('/domains')
+        ? 'domains'
+        : location.pathname.startsWith('/compose')
+          ? 'compose'
+          : location.pathname.startsWith('/events')
+            ? 'events'
+            : location.pathname.startsWith('/seeds')
+              ? 'seeds'
+              : location.pathname.startsWith('/employees')
+                ? 'employees'
+                : location.pathname.startsWith('/rules')
+                  ? 'rules'
+                  : location.pathname.startsWith('/settings')
+                    ? 'settings'
+                    : 'overview';
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-200  via-white to-white flex font-sans">
@@ -643,7 +643,7 @@ function AppContent() {
       </main>
 
       {/* Floating Action Button */}
-      {activeView !== 'compose' && (
+      {/* {activeView !== 'compose' && (
         <button
           onClick={() => navigate('/compose')}
           className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-[#131416] hover:bg-accent-hover text-white shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center cursor-pointer border border-[#ffffff]/10"
@@ -655,7 +655,7 @@ function AppContent() {
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
         </button>
-      )}
+      )} */}
 
       {toast && (
         <ToastNotification toast={toast} />

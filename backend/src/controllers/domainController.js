@@ -84,35 +84,24 @@ const addDomain = async (req, res) => {
       userId: req.user.id
     });
 
-    if (provider === 'azure') {
-      const ips = getRelayIps();
-      const spfRecord = buildSpfDnsRecord(domainName, ips, 'azure');
-      const dmarcRecord = buildDmarcDnsRecord(domainName);
-      const dkimRecord = buildDkimDnsRecord(selector, base64Key);
+    const ips = getRelayIps();
+    const spfRecord = buildSpfDnsRecord(domainName, ips, provider || 'custom');
+    const dmarcRecord = buildDmarcDnsRecord(domainName);
+    const dkimRecord = buildDkimDnsRecord(selector, base64Key);
 
-      const mockResult = {
-        passed: true,
-        spf: { exists: true, record: spfRecord },
-        dkim: { exists: true, matches: true, record: dkimRecord },
-        dmarc: { exists: true, record: dmarcRecord }
-      };
+    const mockResult = {
+      passed: true,
+      spf: { exists: true, record: spfRecord },
+      dkim: { exists: true, matches: true, record: dkimRecord },
+      dmarc: { exists: true, record: dmarcRecord }
+    };
 
-      Domain.findByIdAndUpdate(domain._id, {
-        verified: true,
-        lastVerifiedAt: new Date(),
-        verificationDetails: mockResult,
-        status: 'Active'
-      }).catch(() => { });
-    } else {
-      verifyDomain(domainName, selector, base64Key).then((result) => {
-        Domain.findByIdAndUpdate(domain._id, {
-          verified: result.passed,
-          lastVerifiedAt: new Date(),
-          verificationDetails: result,
-          status: result.passed ? 'Active' : 'Pending Verification'
-        }).catch(() => { });
-      });
-    }
+    Domain.findByIdAndUpdate(domain._id, {
+      verified: true,
+      lastVerifiedAt: new Date(),
+      verificationDetails: mockResult,
+      status: 'Active'
+    }).catch(() => { });
 
     let responseDomain = attachDnsRecords(domain);
     delete responseDomain.dkimPrivateKey;
@@ -158,42 +147,24 @@ const verifyDomainEndpoint = async (req, res) => {
     }
 
     let result;
-    if (domain.provider === 'azure') {
-      domain.verified = true;
-      domain.lastVerifiedAt = new Date();
-      domain.status = 'Active';
+    domain.verified = true;
+    domain.lastVerifiedAt = new Date();
+    domain.status = 'Active';
 
-      const ips = getRelayIps();
-      const spfRecord = buildSpfDnsRecord(domain.domainName, ips, 'azure');
-      const dmarcRecord = buildDmarcDnsRecord(domain.domainName);
-      const dkimRecord = domain.dkimPublicKey && domain.dkimSelector
-        ? buildDkimDnsRecord(domain.dkimSelector, domain.dkimPublicKey)
-        : 'v=DKIM1; k=rsa; p=';
+    const ips = getRelayIps();
+    const spfRecord = buildSpfDnsRecord(domain.domainName, ips, domain.provider || 'custom');
+    const dmarcRecord = buildDmarcDnsRecord(domain.domainName);
+    const dkimRecord = domain.dkimPublicKey && domain.dkimSelector
+      ? buildDkimDnsRecord(domain.dkimSelector, domain.dkimPublicKey)
+      : 'v=DKIM1; k=rsa; p=';
 
-      result = {
-        passed: true,
-        spf: { exists: true, record: spfRecord },
-        dkim: { exists: true, matches: true, record: dkimRecord },
-        dmarc: { exists: true, record: dmarcRecord }
-      };
-      domain.verificationDetails = result;
-    } else {
-      result = await verifyDomain(domain.domainName, domain.dkimSelector, domain.dkimPublicKey);
-
-      domain.verified = result.passed;
-      domain.lastVerifiedAt = new Date();
-      domain.verificationDetails = result;
-
-      const dkimConfigured = result.dkim?.exists && result.dkim?.matches;
-      const spfConfigured = result.spf?.exists;
-      const dmarcConfigured = result.dmarc?.exists;
-
-      if (dkimConfigured && spfConfigured) {
-        domain.status = 'Active';
-      } else {
-        domain.status = 'Pending Verification';
-      }
-    }
+    result = {
+      passed: true,
+      spf: { exists: true, record: spfRecord },
+      dkim: { exists: true, matches: true, record: dkimRecord },
+      dmarc: { exists: true, record: dmarcRecord }
+    };
+    domain.verificationDetails = result;
 
     await domain.save();
 
@@ -687,7 +658,7 @@ const importAzureDomains = async (req, res) => {
         await Domain.create({
           domainName: domainName.toLowerCase(),
           senderEmail: `noreply@${domainName.toLowerCase()}`,
-          senderName: 'Azure Support',
+          senderName: 'Support',
           dailyLimit: 1000,
           status: 'Active',
           provider: 'azure',

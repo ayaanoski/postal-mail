@@ -31,7 +31,9 @@ export default function ComposeView({
     delayType: initialCampaign ? (initialCampaign.delaySettings?.type || 'fixed') : 'fixed',
     fixedValue: initialCampaign ? String(initialCampaign.delaySettings?.fixedValue ?? '0') : '0',
     min: initialCampaign ? String(initialCampaign.delaySettings?.min ?? '0') : '0',
-    max: initialCampaign ? String(initialCampaign.delaySettings?.max ?? '0') : '0'
+    max: initialCampaign ? String(initialCampaign.delaySettings?.max ?? '0') : '0',
+    trackClicks: initialCampaign ? (initialCampaign.trackClicks ?? true) : true,
+    trackOpens: initialCampaign ? (initialCampaign.trackOpens ?? true) : true
   });
 
   const [selectedDomains, setSelectedDomains] = useState(() => {
@@ -55,6 +57,7 @@ export default function ComposeView({
     recipients: true,
     domains: false,
     delivery: false,
+    tracking: false,
     attachments: false
   });
 
@@ -408,6 +411,8 @@ export default function ComposeView({
         senderRotationMode: formData.senderRotationMode,
         selectedDomains,
         delaySettings,
+        trackClicks: formData.trackClicks,
+        trackOpens: formData.trackOpens,
         attachments: attachments.length > 0 ? attachments : undefined
       };
 
@@ -673,6 +678,43 @@ export default function ComposeView({
                     </label>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Section 4.5: Tracking Settings */}
+            {renderSidebarCard('Tracking Settings', 'tracking',
+              <div className="flex flex-col gap-3">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={formData.trackClicks}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, trackClicks: e.target.checked }));
+                      setHasUnsavedChanges(true);
+                    }}
+                    className="w-4 h-4 accent-blue-600 cursor-pointer rounded"
+                  />
+                  <div className="leading-none">
+                    <span className="text-xs text-slate-800 font-bold block">Track Link Clicks</span>
+                    <span className="text-[9px] text-slate-400 block mt-0.5">Redirect links through tracking endpoint</span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={formData.trackOpens}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, trackOpens: e.target.checked }));
+                      setHasUnsavedChanges(true);
+                    }}
+                    className="w-4 h-4 accent-blue-600 cursor-pointer rounded"
+                  />
+                  <div className="leading-none">
+                    <span className="text-xs text-slate-800 font-bold block">Track Email Opens</span>
+                    <span className="text-[9px] text-slate-400 block mt-0.5">Inject tracking pixel at end of email</span>
+                  </div>
+                </label>
               </div>
             )}
 

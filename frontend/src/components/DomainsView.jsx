@@ -899,7 +899,7 @@ export default function DomainsView({
                   <thead>
                     <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider select-none">
                       <th className="py-3 px-6 w-1/4">Domain</th>
-                      <th className="py-3 px-4 w-28">Provider</th>
+                      {/* <th className="py-3 px-4 w-28">Provider</th> */}
                       <th className="py-3 px-4 w-32">Status</th>
                       <th className="py-3 px-4 w-52">Daily Usage</th>
                       <th className="py-3 px-4 w-24">Total Sent</th>
@@ -950,7 +950,7 @@ export default function DomainsView({
                             </div>
                           </td>
 
-                          <td className="py-4.5 px-4">
+                          {/* <td className="py-4.5 px-4">
                             <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md uppercase border ${domain.provider === 'brevo'
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
                               : domain.provider === 'sparkpost'
@@ -963,7 +963,7 @@ export default function DomainsView({
                               }`}>
                               {domain.provider || 'custom'}
                             </span>
-                          </td>
+                          </td> */}
 
                           <td className="py-4.5 px-4">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${statusBadgeStyle}`}>

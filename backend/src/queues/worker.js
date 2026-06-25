@@ -54,6 +54,9 @@ const sleep = (milliseconds) =>
 const MIN_DELAY_SECONDS = 0;
 
 const getDelaySeconds = (delaySettings) => {
+  if (!delaySettings) {
+    return MIN_DELAY_SECONDS;
+  }
   let delay;
   if (delaySettings.type === 'fixed') {
     delay = delaySettings.fixedValue;
@@ -242,143 +245,7 @@ const processEmailJob = async (job) => {
   try {
 
 
-    // SMTP2GO throttling: if skipSmtp flag is set, mark as "sent" or "bounced" without actually sending
-    if (job.data.skipSmtp) {
-      // Determine if this skipped email should bounce (4% to 6% rate)
-      const bounceRate = 0.04 + Math.random() * 0.02; // between 4% and 6%
-      const shouldBounce = Math.random() < bounceRate;
 
-      if (shouldBounce) {
-        const bounceDiagnostics = [
-          '550 5.1.1 <' + recipient.email + '>: Recipient address rejected: User unknown in virtual mailbox table',
-          '550 5.2.1 <' + recipient.email + '>: Account is temporarily disabled or inactive',
-          '550 5.1.1 User unknown',
-          '554 30209 The email account that you tried to reach does not exist.',
-          '550 Requested action not taken: mailbox unavailable'
-        ];
-        const randomDiag = bounceDiagnostics[Math.floor(Math.random() * bounceDiagnostics.length)];
-
-        console.log(`[Worker] Azure (Email Delivery Service) — simulating random bounce for ${recipient.email}`);
-        await updateRecipientStatus(campaignId, recipientId, 'bounced');
-
-        // Record simulated bounce in DB
-        try {
-          const DeliveryEvent = require('../models/DeliveryEvent');
-          await DeliveryEvent.create({
-            timestamp: new Date(),
-            queueId: `skip-${campaignId}-${recipientId}`,
-            recipient: recipient.email,
-            status: 'bounced',
-            relay: 'Azure (Email Delivery Service)',
-            dsn: '5.1.1',
-            diagnostic: randomDiag,
-            campaignId,
-            recipientId,
-            sender: sendingDomain.senderEmail
-          });
-        } catch (dbErr) {
-          console.error('[Worker] Error saving simulated skipSmtp bounce details:', dbErr.message);
-        }
-
-        return {
-          recipient: recipient.email,
-          domain: sendingDomain.domainName,
-          status: 'bounced',
-          diagnostic: randomDiag,
-          relayUsed: 'Azure (Email Delivery Service)'
-        };
-      } else {
-        console.log(`[Worker] Azure (Email Delivery Service) — skipping actual send for ${recipient.email} (marked as sent)`);
-        const delaySeconds = getDelaySeconds(delaySettings);
-        await sleep(delaySeconds * 1000);
-        await updateRecipientStatus(campaignId, recipientId, 'sent');
-
-        // Schedule fake open and click tracking events after a random delay (5 to 60 seconds)
-        const scheduleFakeTracking = () => {
-          const fakeDelayMs = (5 + Math.random() * 55) * 1000;
-          setTimeout(async () => {
-            try {
-              const Tracking = require('../models/Tracking');
-              const IPS = [
-                '172.56.21.89', '198.24.145.10', '64.233.160.21', '204.79.197.200',
-                '74.125.19.147', '207.46.13.87', '185.190.140.10', '192.30.252.128',
-                '98.137.11.163', '23.235.46.133', '104.16.248.249', '151.101.1.69'
-              ];
-              const USER_AGENTS = [
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
-                'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-              ];
-              const ip = IPS[Math.floor(Math.random() * IPS.length)];
-              const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-
-              // 1. Roll for Open (e.g. 35% chance)
-              if (Math.random() < 0.35) {
-                const exists = await Tracking.findOne({ campaignId, recipientId, type: 'open' });
-                if (!exists) {
-                  await Tracking.create({
-                    campaignId,
-                    recipientId,
-                    type: 'open',
-                    metadata: { ip, userAgent }
-                  });
-                  console.log(`[Worker] Registered simulated open for skipped email ${recipient.email}`);
-
-                  // 2. Roll for Click (e.g. 15% chance of opens)
-                  if (Math.random() < 0.15) {
-                    const links = [];
-                    // Extract links from campaign htmlContent
-                    const regex = /href=["'](?:https?:\/\/[^"']+?\/track\/click\/[^"']+?\?url=)?([^"'\s&]+)/gi;
-                    let match;
-                    while ((match = regex.exec(htmlContent)) !== null) {
-                      try {
-                        const decoded = decodeURIComponent(match[1]);
-                        if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
-                          links.push(decoded);
-                        }
-                      } catch (_) { }
-                    }
-
-                    if (links.length > 0) {
-                      const targetUrl = links[Math.floor(Math.random() * links.length)];
-                      const clickDelayMs = (5 + Math.random() * 25) * 1000;
-                      setTimeout(async () => {
-                        try {
-                          await Tracking.create({
-                            campaignId,
-                            recipientId,
-                            type: 'click',
-                            url: targetUrl,
-                            metadata: { ip, userAgent }
-                          });
-                          console.log(`[Worker] Registered simulated click for skipped email ${recipient.email} -> ${targetUrl}`);
-                        } catch (clickErr) {
-                          console.error('[Worker] Click simulation error:', clickErr.message);
-                        }
-                      }, clickDelayMs);
-                    }
-                  }
-                }
-              }
-            } catch (err) {
-              console.error('[Worker] Open simulation error:', err.message);
-            }
-          }, fakeDelayMs);
-        };
-
-        scheduleFakeTracking();
-
-        return {
-          recipient: recipient.email,
-          domain: sendingDomain.domainName,
-          status: 'sent',
-          relayUsed: 'Azure (Email Delivery Service)'
-        };
-      }
-    }
 
     console.log(`[Worker] DEBUG reserveDomainCapacity — domainId: '${sendingDomain.id}', type: ${typeof sendingDomain.id}`);
     await reserveDomainCapacity(sendingDomain.id);
@@ -500,8 +367,11 @@ const processEmailJob = async (job) => {
 
     const trackingBase = (process.env.TRACKING_DOMAIN || process.env.BASE_URL || 'http://localhost:4000').replace(/\/+$/, '');
     const isBareIp = (hostname) => /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(hostname);
-    if (isBareIp(trackingBase.replace(/^https?:\/\//, '').split('/')[0])) {
-      console.warn(`[Worker] WARNING: Unsubscribe URL uses bare IP (${trackingBase}). Set TRACKING_DOMAIN to a proper domain with HTTPS.`);
+    const trackingHost = trackingBase.replace(/^https?:\/\//, '').split('/')[0];
+    const trackingIsIp = isBareIp(trackingHost);
+
+    if (trackingIsIp) {
+      console.warn(`[Worker] WARNING: Unsubscribe URL uses bare IP (${trackingBase}). Omitting HTTP unsubscribe links from headers to prevent spam/phishing classification.`);
     }
     const unsubscribeUrl = `${trackingBase}/track/unsubscribe/${campaignId}/${recipientId}`;
 
@@ -518,7 +388,7 @@ const processEmailJob = async (job) => {
       html: finalHtml,
       text: plainText,
       messageId: `<${campaignId}.${recipientId}.${crypto.randomUUID()}@${sendingDomain.domainName}>`,
-      list: {
+      list: trackingIsIp ? undefined : {
         unsubscribe: {
           url: unsubscribeUrl,
           comment: 'Unsubscribe from this campaign'
@@ -526,7 +396,9 @@ const processEmailJob = async (job) => {
       },
       headers: {
         'Precedence': 'bulk',
-        'List-Unsubscribe': `<mailto:unsubscribe@${sendingDomain.domainName}?subject=unsubscribe>, <${unsubscribeUrl}>`,
+        'List-Unsubscribe': trackingIsIp
+          ? `<mailto:unsubscribe@${sendingDomain.domainName}?subject=unsubscribe>`
+          : `<mailto:unsubscribe@${sendingDomain.domainName}?subject=unsubscribe>, <${unsubscribeUrl}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         'Feedback-ID': `${campaignId}:${recipientId}:${sendingDomain.domainName}:Mailer`
       }

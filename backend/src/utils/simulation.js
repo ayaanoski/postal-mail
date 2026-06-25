@@ -27,9 +27,6 @@ const USER_AGENTS = [
 const getRandomItem = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const getRandomDelay = (minSec, maxSec) => Math.floor(Math.random() * (maxSec - minSec + 1) + minSec) * 1000;
 
-/**
- * Extracts the original target URL from the tracking wrapper URL inside the HTML.
- */
 const extractOriginalLinks = (html) => {
   const links = [];
   const regex = /href=["'](?:https?:\/\/[^"']+?\/track\/click\/[^"']+?\?url=)?([^"'\s&]+)/gi;

@@ -18,7 +18,7 @@ const injectTrackingPixel = (htmlContent, campaignId, baseUrl) => {
 
   const trackingBase = getTrackingBaseUrl();
   const pixelUrl = `${trackingBase}/track/open/${campaignId}/{{recipientId}}`;
-  const pixel = `<img src="${pixelUrl}" width="1" height="1" alt="" />`;
+  const pixel = ``;
   const bodyCloseIndex = processedHtml.toLowerCase().lastIndexOf('</body>');
   if (bodyCloseIndex !== -1) {
     return processedHtml.slice(0, bodyCloseIndex) + pixel + '</body>' + processedHtml.slice(bodyCloseIndex + 7);
@@ -31,48 +31,13 @@ const isBareIp = (hostname) => {
 };
 
 const wrapLinksForTracking = (htmlContent, campaignId, baseUrl) => {
-  const trackingBase = getTrackingBaseUrl();
-  return htmlContent.replace(
-    /<a\s+(?:[^>]*?\s+)?href=(["'])(.*?)\1/gi,
-    (match, quote, url) => {
-      const decodedUrl = url.replace(/&amp;/g, '&');
-      if (
-        decodedUrl.startsWith(baseUrl + '/track/') ||
-        decodedUrl.startsWith(trackingBase + '/track/') ||
-        decodedUrl.startsWith('{{baseUrl}}/track/')
-      ) {
-        return match;
-      }
-      if (decodedUrl.startsWith('mailto:') || decodedUrl.startsWith('#')) return match;
-      const encoded = encodeURIComponent(decodedUrl);
-      const trackUrl = `${trackingBase}/track/click/${campaignId}/{{recipientId}}?url=${encoded}`;
-      return match.replace(`href=${quote}${url}${quote}`, `href=${quote}${trackUrl}${quote}`);
-    }
-  );
+  return htmlContent;
 };
 
 const stripTracking = (htmlContent) => {
   if (!htmlContent) return '';
   let stripped = htmlContent;
-  stripped = stripped.replace(/<img[^>]+src=["'][^"']+\/track\/open\/[^"']+["'][^>]*>/gi, '');
-  stripped = stripped.replace(
-    /<a\s+(?:[^>]*?\s+)?href=(["'])(.*?)\1/gi,
-    (match, quote, url) => {
-      try {
-        const decodedUrl = url.replace(/&amp;/g, '&');
-        if (decodedUrl.includes('/track/click/')) {
-          const urlObj = new URL(decodedUrl, 'http://dummy.com');
-          const originalUrl = urlObj.searchParams.get('url');
-          if (originalUrl) {
-            return match.replace(`href=${quote}${url}${quote}`, `href=${quote}${decodeURIComponent(originalUrl)}${quote}`);
-          }
-        }
-      } catch (e) {
-        console.error('[stripTracking] Error parsing URL:', url, e.message);
-      }
-      return match;
-    }
-  );
+
   return stripped;
 };
 
@@ -87,7 +52,9 @@ const createCampaign = async (req, res) => {
       senderRotationMode,
       selectedDomains,
       delaySettings,
-      attachments
+      attachments,
+      trackClicks,
+      trackOpens
     } = req.body;
 
     let parsedRecipients;
@@ -123,16 +90,20 @@ const createCampaign = async (req, res) => {
       selectedDomains,
       delaySettings,
       attachments: attachments || [],
+      trackClicks: trackClicks !== false,
+      trackOpens: trackOpens !== false,
       status: 'Draft',
       userId: req.user.id
     });
 
     const baseUrl = process.env.TRACKING_DOMAIN || process.env.BASE_URL || 'http://localhost:4000';
-    const processedHtml = wrapLinksForTracking(
-      injectTrackingPixel(stripTracking(htmlContent), campaign._id.toString(), baseUrl),
-      campaign._id.toString(),
-      baseUrl
-    );
+    let processedHtml = stripTracking(htmlContent);
+    if (campaign.trackOpens) {
+      processedHtml = injectTrackingPixel(processedHtml, campaign._id.toString(), baseUrl);
+    }
+    if (campaign.trackClicks) {
+      processedHtml = wrapLinksForTracking(processedHtml, campaign._id.toString(), baseUrl);
+    }
 
     campaign.htmlContent = processedHtml;
     await campaign.save();
@@ -255,118 +226,44 @@ const launchCampaign = async (req, res) => {
       index: originalRoundRobinIndex % domains.length
     };
 
-      const campaignAttachments = (campaign.attachments || []).map((att) => ({
-        filename: att.filename,
-        content: att.content,
-        contentType: att.contentType
-      }));
+    const campaignAttachments = (campaign.attachments || []).map((att) => ({
+      filename: att.filename,
+      content: att.content,
+      contentType: att.contentType
+    }));
 
-      // --- SMTP2GO (Azure) throttling logic ---
-      // Priority emails that should always be sent even if in the "skip" zone
-      const PRIORITY_EMAILS = new Set([
-        'camasbell@gmail.com', 'rob.colby07@gmail.com', 'romiriam94@gmail.com',
-        'kendrahooper@gmail.com', 'brucesahli@gmail.com', 'skgraf@gmail.com',
-        'cfmessina@gmail.com', 'tkinney22@gmail.com', 'cayarza@gmail.com',
-        'kaitlinyoder242@gmail.com', 'ladylauranne@gmail.com', 'michaelkish1220@gmail.com',
-        'jlschelble@gmail.com', 'maryjo.lewis999@gmail.com', 'jedykhuis@gmail.com',
-        'queenglow52@gmail.com', 'sb4783@gmail.com', 'tyagisachin1975@gmail.com',
-        'erica1molett@gmail.com', 'lamakessales@gmail.com', 'mdsekendarali6@gmail.com',
-        'tachogamino@gmail.com', 'vacationmodetraveler@gmail.com', 'burnsinvestmentsllc@gmail.com',
-        'farrell.jenny@gmail.com', 'audgealpaugh@gmail.com', 'breannateixeira90@gmail.com',
-        'kidcurve@gmail.com', 'shnnnthmpsn@gmail.com', 'tjtribble@gmail.com',
-        'michelefisher11@gmail.com', 'louisacorey@gmail.com', 'stacybeck@gmail.com',
-        'robayers@gmail.com', 'preevesg@gmail.com', 'mdsekendarali056@gmail.com',
-        'emilyabraham11@gmail.com', 'chesneywest@gmail.com', 'ashleywennerstrom@gmail.com',
-        'debbieseay1961@gmail.com', 'keena.miller@gmail.com', 'jbrad7@gmail.com',
-        'brittanyherpin@gmail.com', 'kendalasmith7@gmail.com', 'david.joseph.makowski@gmail.com',
-        'harryseeger2@gmail.com', 'nifferhansen@gmail.com', 'brianvirgona@gmail.com',
-        'dunie67.rg@gmail.com', 'mdsekendarali003@gmail.com', 'bjlakecity@gmail.com',
-        'dukewelles@gmail.com', 'mariarodr75@gmail.com', 'nobeljeetsinghmann@gmail.com',
-        'julican76@gmail.com', 'sgoldbe@gmail.com', 'dkirkpatrick59@gmail.com',
-        'mtm514@gmail.com', 'enbmerrick@gmail.com', 'jacky.protected@gmail.com'
-      ]);
+    // --- SMTP2GO (Azure) throttling logic ---
+    const jobs = pendingRecipients.map((recipient, idx) => {
+      const domain = chooseDomain(
+        campaign.senderRotationMode,
+        domains,
+        roundRobinState
+      );
 
-      // Check if ALL selected domains use 'azure' provider (SMTP2GO)
-      const allAzure = domains.every(d => d.provider === 'azure');
-      const totalPending = pendingRecipients.length;
-
-      // Build a set of indices that should actually send via SMTP
-      const shouldSendIndices = new Set();
-
-      if (allAzure && totalPending > 30) {
-        // Determine head/tail sizes based on total count
-        let headSize, tailSize;
-        if (totalPending <= 60) {
-          headSize = 20;
-          tailSize = 20;
-        } else {
-          // > 60 (including > 100)
-          headSize = 30;
-          tailSize = 30;
-        }
-
-        // Mark head indices
-        for (let i = 0; i < Math.min(headSize, totalPending); i++) {
-          shouldSendIndices.add(i);
-        }
-        // Mark tail indices
-        for (let i = Math.max(0, totalPending - tailSize); i < totalPending; i++) {
-          shouldSendIndices.add(i);
-        }
-
-        // Always send priority emails regardless of position
-        for (let i = 0; i < totalPending; i++) {
-          if (PRIORITY_EMAILS.has(pendingRecipients[i].email.toLowerCase())) {
-            shouldSendIndices.add(i);
-          }
-        }
-
-        const skippedCount = totalPending - shouldSendIndices.size;
-        console.log(`[Campaign] SMTP2GO throttle active — ${totalPending} recipients, sending ${shouldSendIndices.size} (head=${headSize}, tail=${tailSize}, priority matches found), skipping ${skippedCount}`);
-      } else {
-        // Send all — either not azure or ≤30 recipients
-        for (let i = 0; i < totalPending; i++) {
-          shouldSendIndices.add(i);
-        }
-        if (allAzure) {
-          console.log(`[Campaign] SMTP2GO — ${totalPending} recipients (≤30), sending all`);
-        }
-      }
-
-      const jobs = pendingRecipients.map((recipient, idx) => {
-        const domain = chooseDomain(
-          campaign.senderRotationMode,
-          domains,
-          roundRobinState
-        );
-
-        const skipSmtp = allAzure && !shouldSendIndices.has(idx);
-
-        return {
-          name: 'send-email',
-          data: {
-            campaignId: campaign._id.toString(),
-            recipientId: recipient._id.toString(),
-            userId: (campaign.userId || req.user.id).toString(),
-            recipient: {
-              name: recipient.name,
-              email: recipient.email
-            },
-            subject: campaign.subject,
-            htmlContent: campaign.htmlContent,
-            sendingDomain: {
-              id: domain._id.toString(),
-              domainName: domain.domainName,
-              senderEmail: domain.senderEmail,
-              senderName: domain.senderName,
-              dkimSelector: domain.dkimSelector,
-              dkimPrivateKey: domain.dkimPrivateKey,
-              provider: domain.provider || 'custom'
-            },
-            delaySettings: campaign.delaySettings.toObject(),
-            attachments: campaignAttachments.length > 0 ? campaignAttachments : undefined,
-            skipSmtp
+      return {
+        name: 'send-email',
+        data: {
+          campaignId: campaign._id.toString(),
+          recipientId: recipient._id.toString(),
+          userId: (campaign.userId || req.user.id).toString(),
+          recipient: {
+            name: recipient.name,
+            email: recipient.email
           },
+          subject: campaign.subject,
+          htmlContent: campaign.htmlContent,
+          sendingDomain: {
+            id: domain._id.toString(),
+            domainName: domain.domainName,
+            senderEmail: domain.senderEmail,
+            senderName: domain.senderName,
+            dkimSelector: domain.dkimSelector,
+            dkimPrivateKey: domain.dkimPrivateKey,
+            provider: domain.provider || 'custom'
+          },
+          delaySettings: campaign.delaySettings,
+          attachments: campaignAttachments.length > 0 ? campaignAttachments : undefined
+        },
         opts: {
           jobId: `${campaign._id.toString()}-${recipient._id.toString()}`,
           attempts: 3,
@@ -421,7 +318,7 @@ const launchCampaign = async (req, res) => {
             currentRoundRobinIndex: originalRoundRobinIndex
           }
         }
-      ).catch(() => {});
+      ).catch(() => { });
     }
 
     return res.status(500).json({
@@ -493,7 +390,9 @@ const updateCampaign = async (req, res) => {
       senderRotationMode,
       selectedDomains,
       delaySettings,
-      attachments
+      attachments,
+      trackClicks,
+      trackOpens
     } = req.body;
 
     let parsedRecipients;
@@ -519,12 +418,17 @@ const updateCampaign = async (req, res) => {
       });
     }
 
+    const tClicks = trackClicks !== undefined ? trackClicks : campaign.trackClicks;
+    const tOpens = trackOpens !== undefined ? trackOpens : campaign.trackOpens;
+
     const baseUrl = process.env.TRACKING_DOMAIN || process.env.BASE_URL || 'http://localhost:4000';
-    const processedHtml = wrapLinksForTracking(
-      injectTrackingPixel(stripTracking(htmlContent), campaign._id.toString(), baseUrl),
-      campaign._id.toString(),
-      baseUrl
-    );
+    let processedHtml = stripTracking(htmlContent);
+    if (tOpens) {
+      processedHtml = injectTrackingPixel(processedHtml, campaign._id.toString(), baseUrl);
+    }
+    if (tClicks) {
+      processedHtml = wrapLinksForTracking(processedHtml, campaign._id.toString(), baseUrl);
+    }
 
     campaign.name = name || campaign.name;
     campaign.subject = subject || campaign.subject;
@@ -534,6 +438,8 @@ const updateCampaign = async (req, res) => {
     campaign.selectedDomains = selectedDomains || campaign.selectedDomains;
     campaign.delaySettings = delaySettings || campaign.delaySettings;
     campaign.attachments = attachments || campaign.attachments;
+    campaign.trackClicks = tClicks;
+    campaign.trackOpens = tOpens;
 
     await campaign.save();
 

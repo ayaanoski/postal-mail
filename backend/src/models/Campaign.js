@@ -122,6 +122,14 @@ const campaignSchema = new mongoose.Schema(
       type: [attachmentSchema],
       default: []
     },
+    trackClicks: {
+      type: Boolean,
+      default: true
+    },
+    trackOpens: {
+      type: Boolean,
+      default: true
+    },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
