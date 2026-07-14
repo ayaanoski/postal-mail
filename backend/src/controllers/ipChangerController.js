@@ -1,7 +1,7 @@
-const { spawn, execSync } = require('child_process');
 const net = require('net');
 const http = require('http');
 const https = require('https');
+const { SocksClient } = require('socks');
 const IpChangerSettings = require('../models/IpChangerSettings');
 
 const STATE = {
@@ -29,8 +29,8 @@ function broadcastSSE(data) {
   }
 }
 
-function broadcastStopped() {
-  const message = `event: stopped\ndata: {}\n\n`;
+function broadcastError(msg) {
+  const message = `event: error\ndata: ${JSON.stringify({ message: msg })}\n\n`;
   for (let i = sseClients.length - 1; i >= 0; i--) {
     try {
       sseClients[i].write(message);
@@ -40,8 +40,8 @@ function broadcastStopped() {
   }
 }
 
-function broadcastError(msg) {
-  const message = `event: error\ndata: ${JSON.stringify({ message: msg })}\n\n`;
+function broadcastStopped() {
+  const message = 'event: stopped\ndata: {}\n\n';
   for (let i = sseClients.length - 1; i >= 0; i--) {
     try {
       sseClients[i].write(message);
@@ -55,59 +55,47 @@ function checkTorRunning() {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(2000);
-    socket.on('connect', () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.on('error', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.on('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
+    socket.on('connect', () => { socket.destroy(); resolve(true); });
+    socket.on('error', () => { socket.destroy(); resolve(false); });
+    socket.on('timeout', () => { socket.destroy(); resolve(false); });
     socket.connect(9050, '127.0.0.1');
   });
 }
 
-function fetchThroughTor(url) {
+async function fetchThroughTor(url) {
+  const urlObj = new URL(url);
+  const port = urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80);
+
+  const { socket } = await SocksClient.createConnection({
+    proxy: { host: '127.0.0.1', port: 9050, type: 5 },
+    command: 'connect',
+    destination: { host: urlObj.hostname, port }
+  });
+
+  if (urlObj.protocol === 'https:') {
+    const tls = require('tls');
+    const tlsSocket = tls.connect({ socket, servername: urlObj.hostname });
+    return new Promise((resolve, reject) => {
+      let data = '';
+      tlsSocket.setTimeout(15000);
+      tlsSocket.on('data', (chunk) => { data += chunk; });
+      tlsSocket.on('end', () => resolve(data));
+      tlsSocket.on('error', (err) => { tlsSocket.destroy(); reject(err); });
+      tlsSocket.on('timeout', () => { tlsSocket.destroy(); reject(new Error('Tor request timeout')); });
+      const path = urlObj.pathname || '/';
+      tlsSocket.write(`GET ${path} HTTP/1.1\r\nHost: ${urlObj.hostname}\r\nConnection: close\r\n\r\n`);
+    });
+  }
+
   return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
-    const transport = urlObj.protocol === 'https:' ? https : http;
-    const req = transport.request(
-      {
-        hostname: urlObj.hostname,
-        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
-        path: urlObj.pathname || '/',
-        method: 'GET',
-        headers: { Host: urlObj.hostname },
-        createConnection: () => {
-          const socket = new net.Socket();
-          socket.connect(9050, '127.0.0.1', () => {
-            socket.write(`CONNECT ${urlObj.hostname}:${urlObj.port || 443} HTTP/1.1\r\nHost: ${urlObj.hostname}\r\n\r\n`);
-            socket.once('data', () => {
-              const tls = require('tls');
-              if (urlObj.protocol === 'https:') {
-                const tlsSocket = tls.connect({ socket, servername: urlObj.hostname });
-                resolve(tlsSocket);
-              } else {
-                resolve(socket);
-              }
-            });
-          });
-          socket.on('error', reject);
-        }
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => resolve(data));
-      }
-    );
-    req.on('error', reject);
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Tor request timeout')); });
-    req.end();
+    let data = '';
+    socket.setTimeout(15000);
+    socket.on('data', (chunk) => { data += chunk; });
+    socket.on('end', () => resolve(data));
+    socket.on('error', (err) => { socket.destroy(); reject(err); });
+    socket.on('timeout', () => { socket.destroy(); reject(new Error('Tor request timeout')); });
+    const path = urlObj.pathname || '/';
+    socket.write(`GET ${path} HTTP/1.1\r\nHost: ${urlObj.hostname}\r\nConnection: close\r\n\r\n`);
   });
 }
 
@@ -119,41 +107,24 @@ function sendNewnym() {
       socket.write('AUTHENTICATE ""\r\n');
       socket.write('SIGNAL NEWNYM\r\n');
       socket.write('QUIT\r\n');
-      setTimeout(() => {
-        socket.destroy();
-        resolve();
-      }, 3000);
+      setTimeout(() => { socket.destroy(); resolve(); }, 3000);
     });
-    socket.on('error', (err) => {
-      socket.destroy();
-      reject(err);
-    });
-    socket.on('timeout', () => {
-      socket.destroy();
-      reject(new Error('Tor control port timeout'));
-    });
+    socket.on('error', (err) => { socket.destroy(); reject(err); });
+    socket.on('timeout', () => { socket.destroy(); reject(new Error('Tor control port timeout')); });
     socket.connect(9051, '127.0.0.1');
   });
 }
 
 async function getNewIp() {
-  try {
-    const ip = await fetchThroughTor('https://api.ipify.org');
-    const ipStr = ip.toString().trim();
-    let country = 'Unknown';
-    let city = 'Unknown';
-    try {
-      const locData = await fetchThroughTor(`http://ip-api.com/json/${ipStr}`);
-      const loc = JSON.parse(locData.toString());
-      if (loc.status === 'success') {
-        country = loc.country;
-        city = loc.city;
-      }
-    } catch (_) {}
-    return { ip: ipStr, country, city };
-  } catch (err) {
-    throw new Error(`Failed to get IP through Tor: ${err.message}`);
-  }
+  const ip = await fetchThroughTor('https://api.ipify.org');
+  const ipStr = ip.toString().trim();
+  const loc = await fetchThroughTor(`http://ip-api.com/json/${ipStr}`);
+  const data = JSON.parse(loc.toString());
+  return {
+    ip: ipStr,
+    country: data.status === 'success' ? data.country : 'Unknown',
+    city: data.status === 'success' ? data.city : 'Unknown'
+  };
 }
 
 async function rotationLoop() {
@@ -176,26 +147,6 @@ async function rotationLoop() {
   }
 }
 
-async function installTorIfNeeded() {
-  try {
-    execSync('which tor', { stdio: 'ignore' });
-    return;
-  } catch (_) {}
-  try {
-    execSync('apt-get update -qq && apt-get install -y -qq tor', { stdio: 'pipe', timeout: 120000 });
-  } catch (_) {
-    throw new Error('Failed to install Tor. Install manually: apt install tor');
-  }
-}
-
-async function ensureTorConfigured() {
-  try {
-    execSync('grep -q "ControlPort 9051" /etc/tor/torrc 2>/dev/null || echo "ControlPort 9051" >> /etc/tor/torrc', { stdio: 'pipe' });
-    execSync('grep -q "CookieAuthentication 0" /etc/tor/torrc 2>/dev/null || echo "CookieAuthentication 0" >> /etc/tor/torrc', { stdio: 'pipe' });
-    execSync('pkill -HUP tor 2>/dev/null || systemctl restart tor 2>/dev/null || true', { stdio: 'pipe' });
-  } catch (_) {}
-}
-
 exports.start = async (req, res) => {
   try {
     if (STATE.running) {
@@ -205,19 +156,9 @@ exports.start = async (req, res) => {
     const settings = await IpChangerSettings.findOne({ userId: req.user.id });
     STATE.interval = settings?.intervalSeconds || 30;
 
-    await installTorIfNeeded();
-    await ensureTorConfigured();
-
     const torRunning = await checkTorRunning();
     if (!torRunning) {
-      try {
-        execSync('systemctl start tor 2>/dev/null || tor --runasdaemon 1 2>/dev/null &', { stdio: 'pipe' });
-        await new Promise((r) => setTimeout(r, 3000));
-      } catch (_) {}
-      const stillRunning = await checkTorRunning();
-      if (!stillRunning) {
-        return res.status(500).json({ message: 'Failed to start Tor. Install it manually: apt install tor' });
-      }
+      return res.status(500).json({ message: 'Tor is not running. Start it: sudo systemctl start tor' });
     }
 
     STATE.running = true;
@@ -226,12 +167,12 @@ exports.start = async (req, res) => {
 
     try {
       await sendNewnym();
-      const { ip, country, city } = await getNewIp();
-      STATE.currentIp = ip;
-      STATE.country = country;
-      STATE.city = city;
+      const ipInfo = await getNewIp();
+      STATE.currentIp = ipInfo.ip;
+      STATE.country = ipInfo.country;
+      STATE.city = ipInfo.city;
       STATE.lastChanged = new Date();
-      broadcastSSE({ ip, country, city, timestamp: STATE.lastChanged.toISOString(), type: 'ip-changed' });
+      broadcastSSE({ ...ipInfo, timestamp: STATE.lastChanged.toISOString(), type: 'ip-changed' });
     } catch (firstIpErr) {
       STATE.currentIp = 'unknown';
       STATE.country = null;
@@ -248,10 +189,7 @@ exports.start = async (req, res) => {
 };
 
 exports.stop = async (req, res) => {
-  if (STATE.timer) {
-    clearTimeout(STATE.timer);
-    STATE.timer = null;
-  }
+  if (STATE.timer) { clearTimeout(STATE.timer); STATE.timer = null; }
   STATE.running = false;
   STATE.currentIp = null;
   STATE.country = null;
@@ -283,9 +221,10 @@ exports.status = async (req, res) => {
 exports.sseEvents = async (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no'
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Alt-Svc': 'clear'
   });
   res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
   sseClients.push(res);
@@ -305,15 +244,13 @@ exports.updateSettings = async (req, res) => {
   if (!intervalSeconds || intervalSeconds < 10 || intervalSeconds > 300) {
     return res.status(400).json({ message: 'Interval must be between 10 and 300 seconds' });
   }
-  const settings = await IpChangerSettings.findOneAndUpdate(
+  await IpChangerSettings.findOneAndUpdate(
     { userId: req.user.id },
     { userId: req.user.id, intervalSeconds, updatedAt: new Date() },
     { upsert: true, new: true }
   );
-  if (STATE.running) {
-    STATE.interval = intervalSeconds;
-  }
-  res.json({ saved: true, intervalSeconds: settings.intervalSeconds });
+  if (STATE.running) STATE.interval = intervalSeconds;
+  res.json({ saved: true, intervalSeconds });
 };
 
 exports.isRunning = () => STATE.running;
