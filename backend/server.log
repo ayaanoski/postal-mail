@@ -1,0 +1,6 @@
+MongoDB connected
+[Server] TRACKING_DOMAIN: https://track.tunstake.com ✓
+[PostfixLogParser] Initialized 210 events and stats from MongoDB.
+[Server] Postfix log parser disabled (Brevo mode active)
+API server listening on port 4000
+[Server] Loaded 2227 suppressed emails into memory
