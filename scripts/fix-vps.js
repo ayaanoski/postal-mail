@@ -15,30 +15,6 @@ conn.on('ready', () => {
     PORT=4000 pm2 start src/server.js --name "mailer-api" --update-env
     pm2 save
     
-    # 2. Make sure Postal MariaDB is running
-    docker rm -f postal-mariadb || true
-    docker run -d --name postal-mariadb -p 127.0.0.1:3306:3306 --restart always -e MARIADB_ROOT_PASSWORD=postal_root_password -e MARIADB_DATABASE=postal -e MARIADB_USER=postal -e MARIADB_PASSWORD=postal_password mariadb:10.11
-    
-    # Wait for DB to boot
-    sleep 5
-    
-    # 3. Clean up any broken Postal installation
-    rm -rf /opt/postal/config/*
-    
-    # 4. Bootstrap Postal properly
-    cd /opt/postal/install
-    postal bootstrap mail.mailer-us.com
-    
-    # 5. Fix Postal passwords
-    sed -i 's/password:.*/password: "postal_password"/' /opt/postal/config/postal.yml
-    sed -i 's/username:.*/username: "postal"/' /opt/postal/config/postal.yml
-    
-    # 6. Initialize Postal Database
-    postal initialize
-    
-    # 7. Start Postal
-    postal start
-    
     echo "VPS FIX SCRIPT COMPLETE"
   `, (err, stream) => {
     if (err) throw err;

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api';
 
-export default function SettingsView({ showToast }) {
+export default function SettingsView({ showToast, ipChanger }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(null); // 'form' or config ID
@@ -170,6 +170,56 @@ export default function SettingsView({ showToast }) {
     }
   };
 
+  const [ipcInterval, setIpcInterval] = useState(30);
+  const [ipcLoading, setIpcLoading] = useState(false);
+  const [ipcSaving, setIpcSaving] = useState(false);
+
+  useEffect(() => {
+    if (!ipChanger?.running) return;
+    apiFetch('/ip-changer/settings').then((res) => {
+      if (res?.intervalSeconds) setIpcInterval(res.intervalSeconds);
+    }).catch(() => {});
+  }, []);
+
+  const handleIpcStart = async () => {
+    setIpcLoading(true);
+    try {
+      await apiFetch('/ip-changer/start', { method: 'POST' });
+      showToast('IP Changer started.');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setIpcLoading(false);
+    }
+  };
+
+  const handleIpcStop = async () => {
+    setIpcLoading(true);
+    try {
+      await apiFetch('/ip-changer/stop', { method: 'POST' });
+      showToast('IP Changer stopped.');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setIpcLoading(false);
+    }
+  };
+
+  const handleIpcSaveSettings = async () => {
+    setIpcSaving(true);
+    try {
+      await apiFetch('/ip-changer/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ intervalSeconds: ipcInterval })
+      });
+      showToast('Settings saved.');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setIpcSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -182,7 +232,15 @@ export default function SettingsView({ showToast }) {
     <div className="space-y-8 p-14">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-extrabold text-fg tracking-tight">SMTP Settings</h1>
+        <h1 className="text-2xl font-extrabold text-fg tracking-tight">Settings</h1>
+        <p className="text-sm text-fg-secondary mt-1 font-medium">
+          SMTP configurations and IP rotation controls.
+        </p>
+      </div>
+
+      {/* ─── SMTP Settings Section ─── */}
+      <div>
+        <h2 className="text-base font-bold text-fg mb-4">SMTP Settings</h2>
         <p className="text-sm text-fg-secondary mt-1 font-medium">
           Configure multiple personal SMTP servers for rotative campaign delivery.
         </p>
@@ -582,6 +640,112 @@ export default function SettingsView({ showToast }) {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ─── IP Changer Section ─── */}
+      <div className="border-t border-border-light pt-8">
+        <h2 className="text-base font-bold text-fg mb-1">IP Changer</h2>
+        <p className="text-xs text-fg-secondary font-medium mb-5">
+          Route email sending through Tor to rotate outbound IPs every N seconds.
+        </p>
+
+        <div className="bg-white border border-border-light rounded-[24px] shadow-sm overflow-hidden">
+          <div className="p-6 space-y-5">
+            {/* Interval */}
+            <label className="flex flex-col gap-1.5 max-w-[260px]">
+              <span className="text-xs font-bold text-fg-secondary pl-1">IP Change Interval (seconds)</span>
+              <div className="flex items-center gap-3">
+                <input
+                  className="w-full h-11 px-4.5 bg-surface-secondary border border-transparent rounded-full outline-none text-sm text-fg placeholder:text-fg-muted focus:border-border focus:bg-white focus:ring-2 focus:ring-accent/5 transition-all font-medium"
+                  type="number"
+                  min={10}
+                  max={300}
+                  value={ipcInterval}
+                  onChange={(e) => setIpcInterval(Number(e.target.value))}
+                />
+                <button
+                  onClick={handleIpcSaveSettings}
+                  disabled={ipcSaving}
+                  className="h-11 px-5 rounded-full text-xs font-bold bg-[#131416] hover:bg-accent-hover text-white transition-all disabled:opacity-50 cursor-pointer"
+                  type="button"
+                >
+                  {ipcSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </label>
+
+            {/* Status Display */}
+            <div className={`rounded-2xl border p-5 ${ipChanger?.running ? 'bg-emerald-50/50 border-emerald-200' : 'bg-surface-secondary/50 border-border-light'}`}>
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className={`w-2.5 h-2.5 rounded-full ${ipChanger?.running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                <span className="text-sm font-extrabold text-fg">
+                  {ipChanger?.running ? 'RUNNING' : 'STOPPED'}
+                </span>
+                {ipChanger?.running && ipChanger?.currentIp && (
+                  <span className="text-[10px] font-bold text-fg-muted bg-white px-2.5 py-1 rounded-full border border-emerald-100 ml-auto tabular-nums">
+                    Next change in {ipChanger.nextChangeIn}s
+                  </span>
+                )}
+              </div>
+
+              {ipChanger?.running && ipChanger?.currentIp ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-white rounded-xl px-3.5 py-2.5 border border-emerald-100">
+                    <span className="text-[10px] font-bold text-fg-muted uppercase tracking-wider">Current IP</span>
+                    <div className="font-extrabold text-fg mt-0.5 font-mono">{ipChanger.currentIp}</div>
+                  </div>
+                  <div className="bg-white rounded-xl px-3.5 py-2.5 border border-emerald-100">
+                    <span className="text-[10px] font-bold text-fg-muted uppercase tracking-wider">Location</span>
+                    <div className="font-extrabold text-fg mt-0.5">
+                      {ipChanger.country || 'Unknown'}{ipChanger.city ? `, ${ipChanger.city}` : ''}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl px-3.5 py-2.5 border border-emerald-100">
+                    <span className="text-[10px] font-bold text-fg-muted uppercase tracking-wider">Uptime</span>
+                    <div className="font-extrabold text-fg mt-0.5 tabular-nums">
+                      {ipChanger?.uptime ? `${Math.floor(ipChanger.uptime / 60)}m ${ipChanger.uptime % 60}s` : '—'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-fg-muted font-medium">IP Changer is not active. Start it below.</p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3">
+              {ipChanger?.running ? (
+                <button
+                  onClick={handleIpcStop}
+                  disabled={ipcLoading}
+                  className="h-10 px-6 rounded-full text-xs font-bold bg-red-500 hover:bg-red-600 text-white transition-all disabled:opacity-50 cursor-pointer"
+                  type="button"
+                >
+                  {ipcLoading ? 'Stopping...' : 'Stop IP Changer'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleIpcStart}
+                  disabled={ipcLoading}
+                  className="h-10 px-6 rounded-full text-xs font-bold bg-[#131416] hover:bg-accent-hover text-white transition-all disabled:opacity-50 cursor-pointer"
+                  type="button"
+                >
+                  {ipcLoading ? 'Starting...' : 'Start IP Changer'}
+                </button>
+              )}
+            </div>
+
+            {/* Warning */}
+            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold leading-relaxed">
+              <svg className="w-4 h-4 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <span>Tor exit IPs are on many blocklists. Emails may be rejected or land in spam by major providers (Gmail, Outlook, Yahoo). Use at your own risk — primarily for testing.</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

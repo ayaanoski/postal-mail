@@ -137,7 +137,7 @@
           {
             "from": "domainController.importBrevoDomains/SparkpostDomains/VpsDomains",
             "to": "external provider APIs",
-            "action": "fetches domains from Brevo, SparkPost, or VPS Postal"
+            "action": "fetches domains from Brevo or SparkPost"
           }
         ]
       },
@@ -166,7 +166,7 @@
           },
           {
             "from": "smtpConfigController.testSmtpConnection (VPS provider)",
-            "to": "Postal HTTP API",
+            "to": "SMTP Relay",
             "action": "tests connection via HTTP API instead of SMTP"
           }
         ]

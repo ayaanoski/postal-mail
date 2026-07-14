@@ -301,8 +301,6 @@ const sendTestEmail = async (req, res) => {
     // Resolve user SMTP configurations to dynamically route test emails
     const SmtpConfig = require('../models/SmtpConfig');
     const { decryptSmtpPassword } = require('../utils/crypto');
-    const { createPostalClient } = require('../providers/postal');
-
     const dbConfigs = await SmtpConfig.find({ userId: req.user.id, isActive: true })
       .select('+smtpPass +smtpPassIv +smtpPassTag');
 

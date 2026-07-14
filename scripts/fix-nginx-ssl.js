@@ -10,7 +10,7 @@ conn.on('ready', () => {
     echo "Generating self-signed cert..."
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/mail-selfsigned.key -out /etc/ssl/certs/mail-selfsigned.crt -subj "/CN=mail.mailer-us.com"
     
-    echo "Updating Nginx config for Postal with SSL"
+    echo "Updating Nginx config for mail.mailer-us.com with SSL"
     cat << 'EOF' > /etc/nginx/sites-available/mail.mailer-us.com
 server {
     listen 80;

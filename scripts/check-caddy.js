@@ -10,10 +10,10 @@ conn.on('ready', () => {
     netstat -tulpn | grep 443
     
     echo "--- Caddy logs ---"
-    docker logs --tail 20 postal-caddy
+    docker logs --tail 20 mailer-caddy || echo "No mailer-caddy container"
     
     echo "--- Caddyfile ---"
-    cat /opt/postal/config/Caddyfile
+    cat /etc/caddy/Caddyfile 2>/dev/null || echo "No Caddyfile found"
     
   `, (err, stream) => {
     if (err) throw err;

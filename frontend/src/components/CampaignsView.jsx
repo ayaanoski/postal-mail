@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import CampaignCard from './CampaignCard';
 
 export default function CampaignsView({
-  campaigns = [],
+  campaigns,
   onRefresh,
   onLaunch,
   searchQuery = '',
-  user
+  user,
+  ipChanger
 }) {
   const navigate = useNavigate();
   const [layoutMode, setLayoutMode] = useState('kanban');
@@ -83,6 +84,16 @@ export default function CampaignsView({
 
   return (
     <section className="flex flex-col gap-6 bg-gradient-to-br from-blue-500 to-blue-800 font-sans text-fg">
+      {/* IP Changer Banner */}
+      {ipChanger?.running && (
+        <div className="flex items-center gap-3 px-6 py-3.5 rounded-[18px] bg-emerald-50 border border-emerald-200 text-xs font-bold mx-14 mt-4">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+          <span className="text-emerald-700">IP Changer Active</span>
+          <span className="text-emerald-600 font-mono">{ipChanger.currentIp || '...'}</span>
+          {ipChanger.country && <span className="text-emerald-500 font-medium">({ipChanger.country})</span>}
+          <span className="text-emerald-400 ml-auto tabular-nums">next IP change in {ipChanger.nextChangeIn || 0}s</span>
+        </div>
+      )}
       <div className="flex flex-col px-14 pt-10 sm:flex-row sm:items-center justify-between gap-4 ">
         <div>
           <h2 className="text-3xl font-extrabold text-white tracking-tight">Campaigns</h2>

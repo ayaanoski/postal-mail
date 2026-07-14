@@ -24,6 +24,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
     "nodemailer": "^6.9.16",
+    "socks": "^2.8.9",
     "uuid": "^14.0.0"
   },
   "devDependencies": {

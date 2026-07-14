@@ -27,6 +27,9 @@ app.get('/health', (req, res) => {
 app.use('/track', require('./routes/tracking'));
 app.use('/api', apiRoutes);
 
+// IP Changer SSE endpoint (also mounted at /api/ip-changer/events via routes, but this direct path avoids middleware issues)
+app.get('/api/ip-changer/events', require('./controllers/ipChangerController').sseEvents);
+
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path === '/health') return next();
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));

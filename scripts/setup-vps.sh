@@ -1,6 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # Mailer-US — VPS Setup Script for Ubuntu 22.04 / 24.04
+# Includes Tor + IP Changer setup
 # Run as root:  bash setup-vps.sh
 # =============================================================================
 set -euo pipefail
@@ -15,10 +16,7 @@ REDIS_PORT="6379"
 JWT_SECRET="IGUG*&^98977^**"
 SMTP_ENCRYPTION_KEY="51deb3a402625dfc5eb28c8ed2dc72449065e11bdc76dafec761bc33dbc319e7"
 
-# Set this to the hostname that resolves to this VPS's IP (used in SMTP HELO)
-# e.g., if your VPS IP reverse-resolves to vps-123.hostinger.com, use that.
 VPS_HOSTNAME="mail.mailer-us.com"
-
 BACKEND_PORT="4000"
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -69,7 +67,34 @@ else
 fi
 log "Repository ready at $APP_DIR"
 
-# ── 6. Backend .env ───────────────────────────────────────────────────────────
+# ── 6. Tor + IP Changer ───────────────────────────────────────────────────────
+info "Installing Tor for IP rotation..."
+apt-get install -y -qq tor netcat-openbsd
+
+# Enable control port for NEWNYM signal
+if grep -q "^ControlPort" /etc/tor/torrc 2>/dev/null; then
+  info "ControlPort already configured in torrc"
+else
+  echo "" >> /etc/tor/torrc
+  echo "# Added by Mailer-US for IP Changer" >> /etc/tor/torrc
+  echo "ControlPort 9051" >> /etc/tor/torrc
+  echo "CookieAuthentication 0" >> /etc/tor/torrc
+fi
+
+systemctl enable --now tor
+sleep 2
+log "Tor running on 127.0.0.1:9050 (SOCKS5) and :9051 (Control)"
+
+# Test Tor is working
+TOR_TEST=$(curl --socks5 127.0.0.1:9050 -s --max-time 10 https://api.ipify.org 2>/dev/null || echo "timeout")
+if [ "$TOR_TEST" = "timeout" ] || [ -z "$TOR_TEST" ]; then
+  echo -e "${YELLOW}[!] Tor test timed out — may need more time to bootstrap. Continuing...${NC}"
+else
+  log "Tor test passed — exit IP: $TOR_TEST"
+fi
+# ───────────────────────────────────────────────────────────────────────────────
+
+# ── 7. Backend .env ───────────────────────────────────────────────────────────
 info "Writing backend .env..."
 cat > "$APP_DIR/backend/.env" <<EOF
 PORT=${BACKEND_PORT}
@@ -82,20 +107,29 @@ MAIL_RELAY_PORT=2525
 MAIL_RELAY_IGNORE_TLS=true
 VPS_HOSTNAME=${VPS_HOSTNAME}
 SMTP_ENCRYPTION_KEY=${SMTP_ENCRYPTION_KEY}
+TRACKING_DOMAIN=https://track.tunstake.com
+BASE_URL=http://${VPS_HOSTNAME:-localhost}:${BACKEND_PORT}
 EOF
 log ".env written"
 
-# ── 7. Install Backend Dependencies ───────────────────────────────────────────
+# ── 8. Install Backend Dependencies ───────────────────────────────────────────
 info "Installing backend npm dependencies..."
 npm install --prefix "$APP_DIR/backend" --silent --omit=dev
-log "Dependencies installed"
+log "Dependencies installed (socks package included)"
 
-# ── 8. Build & Start Postfix Mail Relay (Docker) ──────────────────────────────
+# ── 9. Build Frontend ─────────────────────────────────────────────────────────
+info "Building frontend..."
+cd "$APP_DIR/frontend"
+npm install --silent
+npm run build --silent
+log "Frontend built to backend/public/"
+
+# ── 10. Build & Start Postfix Mail Relay (Docker) ─────────────────────────────
 info "Building Postfix relay Docker image..."
 VPS_HOSTNAME="$VPS_HOSTNAME" docker compose -f "$APP_DIR/backend/docker-compose.yml" up -d --build
 log "Postfix relay running on 127.0.0.1:2525"
 
-# ── 9. Start Backend & Worker with PM2 ────────────────────────────────────────
+# ── 11. Start Backend & Worker with PM2 ───────────────────────────────────────
 info "Starting API server and email worker with PM2..."
 pm2 delete mailer-api mailer-worker 2>/dev/null || true
 
@@ -114,44 +148,40 @@ pm2 start "$APP_DIR/backend/src/queues/worker.js" \
 pm2 save
 log "PM2 processes started and saved"
 
-# ── 10. Firewall ──────────────────────────────────────────────────────────────
+# ── 12. Firewall ──────────────────────────────────────────────────────────────
 info "Configuring UFW firewall..."
 ufw allow OpenSSH
-ufw allow 4000/tcp   # API port (restrict to your IP in production)
+ufw allow 4000/tcp
 ufw --force enable
 log "Firewall configured"
 
-# ── 11. Open Port 25 (SMTP outbound) ──────────────────────────────────────────
-info "Checking if port 25 is blocked by Hostinger..."
-echo ""
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}  ACTION REQUIRED: Unblock Port 25 in Hostinger VPS panel${NC}"
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo "  Hostinger blocks outbound port 25 by default."
-echo "  Go to: Hostinger hPanel → VPS → Your VPS → Firewall"
-echo "  Allow outbound port 25 (TCP)"
-echo ""
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-
-# ── Summary ───────────────────────────────────────────────────────────────────
+# ── 13. Summary ───────────────────────────────────────────────────────────────
 VPS_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "unknown")
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  ✅  Mailer-US Setup Complete!${NC}"
+echo -e "${GREEN}  ✅  Mailer-US + Tor IP Changer Setup Complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "  API Server  →  http://${VPS_IP}:${BACKEND_PORT}"
-echo "  PM2 Status  →  pm2 list"
-echo "  API Logs    →  pm2 logs mailer-api"
-echo "  Worker Logs →  pm2 logs mailer-worker"
-echo "  Postfix     →  docker logs mailer-postfix-relay"
+echo "  API Server    →  http://${VPS_IP}:${BACKEND_PORT}"
+echo "  Tor SOCKS5    →  127.0.0.1:9050"
+echo "  Tor Control   →  127.0.0.1:9051"
+echo "  PM2 Status    →  pm2 list"
+echo "  API Logs      →  pm2 logs mailer-api"
+echo "  Worker Logs   →  pm2 logs mailer-worker"
+echo "  Postfix       →  docker logs mailer-postfix-relay"
 echo ""
-echo -e "${YELLOW}  Next steps:${NC}"
-echo "  1. Unblock outbound port 25 in Hostinger VPS Firewall panel"
-echo "  2. Set a PTR/reverse-DNS record for ${VPS_IP} → ${VPS_HOSTNAME}"
-echo "  3. Point your frontend API base URL to http://${VPS_IP}:${BACKEND_PORT}"
-echo "  4. (Optional) Put Nginx in front with SSL"
+echo -e "${YELLOW}  Post-install steps:${NC}"
+echo "  1. Open http://${VPS_IP}:${BACKEND_PORT} in browser"
+echo "  2. Register an account → wait for approval → or manually approve in MongoDB"
+echo "  3. Go to Settings → IP Changer → set interval → Start"
+echo "  4. Watch live IP rotation in the UI"
+echo ""
+
+# ── Port 25 reminder ──────────────────────────────────────────────────────────
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}  ⚠  If using Hostinger: unblock outbound port 25 in the panel${NC}"
+echo -e "${YELLOW}  ⚠  Set PTR record for ${VPS_IP} → ${VPS_HOSTNAME}${NC}"
+echo -e "${YELLOW}  ⚠  (Optional) Set up Nginx reverse proxy + SSL${NC}"
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""

@@ -867,13 +867,7 @@ export default function DomainsView({
                   >
                     Import Senders from SparkPost
                   </button>
-                  <button
-                    onClick={() => { setImportSource('vps'); setShowImportModal(true); }}
-                    className="inline-flex items-center justify-center h-10 px-5 bg-white border border-slate-200 text-xs font-bold text-slate-700 rounded-full shadow-sm hover:bg-slate-50 transition-all cursor-pointer"
-                    type="button"
-                  >
-                    Import from VPS (Postal)
-                  </button>
+
                   <button
                     onClick={handleImportAzureClick}
                     disabled={isImportingAzure}
@@ -955,9 +949,7 @@ export default function DomainsView({
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
                               : domain.provider === 'sparkpost'
                                 ? 'bg-amber-50 text-brand-orange border-amber-100'
-                                : domain.provider === 'vps'
-                                  ? 'bg-purple-50 text-purple-700 border-purple-100'
-                                  : domain.provider === 'azure'
+                                : domain.provider === 'azure'
                                     ? 'bg-blue-50 text-blue-700 border-blue-100'
                                     : 'bg-slate-50 text-slate-700 border-slate-100'
                               }`}>
@@ -1133,20 +1125,18 @@ const DnsSetupTable = ({
     ? 'mailin'
     : isSparkPost
       ? 'sparkpost'
-      : (provider === 'vps' ? 'postal-xxxx' : (domain.dkimSelector || 'default'));
+      : (domain.dkimSelector || 'default');
 
   const dkimRecord = isBrevo
     ? 'Configure and copy DKIM key from your Brevo Dashboard'
     : isSparkPost
       ? 'Refer to SparkPost Sending Domains dashboard'
-      : provider === 'vps'
-        ? 'Copy the exact DKIM record from your Postal Web Interface -> Domains'
-        : (domain.dkimPublicKey
-          ? `v=DKIM1; k=rsa; p=${domain.dkimPublicKey}`
-          : 'Generate DKIM keys below');
+      : (domain.dkimPublicKey
+        ? `v=DKIM1; k=rsa; p=${domain.dkimPublicKey}`
+        : 'Generate DKIM keys below');
 
   const dkimHostname = `${dkimSelector}._domainkey`;
-  const hasDkim = !isBrevo && !isSparkPost && provider !== 'vps' && !!domain.dkimPublicKey;
+  const hasDkim = !isBrevo && !isSparkPost && !!domain.dkimPublicKey;
 
   const v = domain.verificationDetails;
 
@@ -1175,12 +1165,10 @@ const DnsSetupTable = ({
         ? 'DKIM is automatically handled by Brevo. Add the unique mailin._domainkey TXT record from your Brevo Console.'
         : isSparkPost
           ? 'DKIM is managed by SparkPost. Refer to your SparkPost dashboard (Configuration > Sending Domains) to copy the exact DKIM record details.'
-          : provider === 'vps'
-            ? 'DKIM is managed by Postal. Copy the exact DKIM TXT record provided in the Postal web interface.'
-            : 'DomainKeys Identified Mail — cryptographic signature to verify sender authenticity',
+          : 'DomainKeys Identified Mail — cryptographic signature to verify sender authenticity',
       verified: v?.dkim?.exists,
       liveValue: v?.dkim?.record,
-      needsGeneration: !isBrevo && !isSparkPost && provider !== 'vps' && !domain.dkimPublicKey
+      needsGeneration: !isBrevo && !isSparkPost && !domain.dkimPublicKey
     },
     {
       id: 'dmarc',

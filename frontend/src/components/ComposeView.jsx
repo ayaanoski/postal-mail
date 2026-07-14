@@ -5,7 +5,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function ComposeView({
   domains,
-  onSaveCampaign
+  onSaveCampaign,
+  ipChanger
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1121,30 +1122,42 @@ export default function ComposeView({
       )}
 
       {/* Sticky Bottom Footer */}
-      <div className="fixed bottom-0 left-0 right-0 lg:left-[250px] bg-white/80 backdrop-blur-md border-t border-slate-100 py-4.5 px-8 flex items-center justify-between shadow-xl shadow-slate-900/5 z-20">
-        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-          {hasUnsavedChanges ? 'You have unsaved changes.' : 'All changes saved.'}
-        </span>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm('Are you sure you want to discard your changes and go back?')) {
-                navigate('/');
-              }
-            }}
-            className="h-10 px-5 border border-red-200 hover:border-red-300 hover:bg-red-50/30 text-red-650 rounded-full text-xs font-bold cursor-pointer transition-all active:scale-98 bg-white"
-          >
-            Discard Changes
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSaving}
-            className="h-10 px-6 rounded-full text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-500/15 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
-          >
-            {isSaving ? 'Saving Draft...' : 'Save Changes'}
-          </button>
+      <div className="fixed bottom-0 left-0 right-0 lg:left-[250px] bg-white/80 backdrop-blur-md border-t border-slate-100 shadow-xl shadow-slate-900/5 z-20">
+        {/* IP Changer Bar */}
+        {ipChanger?.running && (
+          <div className="flex items-center gap-3 px-8 py-2 bg-emerald-50/80 border-b border-emerald-100 text-[11px] font-bold">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-emerald-700">IP Changer ACTIVE</span>
+            <span className="text-emerald-600 font-mono">{ipChanger.currentIp || '...'}</span>
+            {ipChanger.country && <span className="text-emerald-500 font-medium">({ipChanger.country})</span>}
+            <span className="text-emerald-400 ml-auto tabular-nums">next change in {ipChanger.nextChangeIn || 0}s</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between py-4.5 px-8">
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+            {hasUnsavedChanges ? 'You have unsaved changes.' : 'All changes saved.'}
+          </span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Are you sure you want to discard your changes and go back?')) {
+                  navigate('/');
+                }
+              }}
+              className="h-10 px-5 border border-red-200 hover:border-red-300 hover:bg-red-50/30 text-red-650 rounded-full text-xs font-bold cursor-pointer transition-all active:scale-98 bg-white"
+            >
+              Discard Changes
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSaving}
+              className="h-10 px-6 rounded-full text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-500/15 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? 'Saving Draft...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
       </div>
 

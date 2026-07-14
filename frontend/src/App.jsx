@@ -28,6 +28,14 @@ function AppContent() {
   const [campaigns, setCampaigns] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [overviewStats, setOverviewStats] = useState(null);
+  const [ipChanger, setIpChanger] = useState({
+    running: false,
+    currentIp: null,
+    country: null,
+    city: null,
+    interval: 30,
+    nextChangeIn: 0
+  });
 
   const [authTab, setAuthTab] = useState('login');
   const [loginEmail, setLoginEmail] = useState('');
@@ -103,6 +111,59 @@ function AppContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.token]);
+
+  // IP Changer SSE connection
+  useEffect(() => {
+    if (!session.token) {
+      setIpChanger({ running: false, currentIp: null, country: null, city: null, interval: 30, nextChangeIn: 0 });
+      return;
+    }
+    let eventSource = null;
+    let reconnectTimer = null;
+    const connect = () => {
+      if (eventSource) eventSource.close();
+      const token = localStorage.getItem('mailerToken') || '';
+      eventSource = new EventSource(`/api/ip-changer/events?token=${token}`);
+      eventSource.addEventListener('ip-changed', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          setIpChanger((prev) => ({
+            ...prev,
+            running: true,
+            currentIp: data.ip,
+            country: data.country,
+            city: data.city,
+            interval: prev.interval,
+            nextChangeIn: prev.interval
+          }));
+        } catch (_) {}
+      });
+      eventSource.addEventListener('stopped', () => {
+        setIpChanger({ running: false, currentIp: null, country: null, city: null, interval: 30, nextChangeIn: 0 });
+      });
+      eventSource.addEventListener('error', () => {
+        eventSource.close();
+        reconnectTimer = setTimeout(connect, 5000);
+      });
+    };
+    connect();
+    return () => {
+      if (eventSource) eventSource.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, [session.token]);
+
+  // Countdown timer for next IP change
+  useEffect(() => {
+    if (!ipChanger.running || !ipChanger.nextChangeIn) return;
+    const interval = setInterval(() => {
+      setIpChanger((prev) => ({
+        ...prev,
+        nextChangeIn: Math.max(0, prev.nextChangeIn - 1)
+      }));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [ipChanger.running, ipChanger.nextChangeIn, ipChanger.currentIp]);
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
@@ -563,6 +624,7 @@ function AppContent() {
                   <ComposeView
                     domains={domains}
                     onSaveCampaign={handleSaveCampaign}
+                    ipChanger={ipChanger}
                   />
                 }
               />
@@ -613,6 +675,7 @@ function AppContent() {
                 element={
                   <SettingsView
                     showToast={showToast}
+                    ipChanger={ipChanger}
                   />
                 }
               />
@@ -625,6 +688,7 @@ function AppContent() {
                     onLaunch={handleLaunchCampaign}
                     searchQuery={searchQuery}
                     user={session.user}
+                    ipChanger={ipChanger}
                   />
                 }
               />

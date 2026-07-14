@@ -7,11 +7,7 @@ conn.on('ready', () => {
     set -e
     set -x
     
-    echo "Stopping postal-caddy as Nginx is already managing ports 80/443"
-    docker stop postal-caddy || true
-    docker rm postal-caddy || true
-    
-    echo "Creating Nginx config for Postal"
+    echo "Creating Nginx config for mail.mailer-us.com"
     cat << 'EOF' > /etc/nginx/sites-available/mail.mailer-us.com
 server {
     server_name mail.mailer-us.com;

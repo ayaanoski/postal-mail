@@ -10,7 +10,7 @@ const Campaign = require('../models/Campaign');
 const Domain = require('../models/Domain');
 const SmtpConfig = require('../models/SmtpConfig');
 const { decryptSmtpPassword } = require('../utils/crypto');
-const { createPostalClient } = require('../providers/postal');
+const ipChanger = require('../controllers/ipChangerController');
 
 const htmlToPlainText = (html) => {
   let text = html
@@ -319,12 +319,16 @@ const processEmailJob = async (job) => {
                 userSmtpConfig.smtpPassTag
               );
             relayName = `${userSmtpConfig.provider.toUpperCase()} (${userSmtpConfig.name || userSmtpConfig.smtpHost})`;
+            const transportOptions = {};
+            if (ipChanger.isRunning()) {
+              transportOptions.socksProxy = 'socks5://127.0.0.1:9050';
+            }
             userTransport = relayPool.createTransportForUser({
               smtpHost: userSmtpConfig.smtpHost,
               smtpPort: userSmtpConfig.smtpPort,
               smtpUser: userSmtpConfig.smtpUser,
               smtpPass: plainPass
-            });
+            }, transportOptions);
             relay = userTransport;
             isUserSmtp = true;
           } catch (decryptErr) {

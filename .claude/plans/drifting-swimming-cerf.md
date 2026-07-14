@@ -47,9 +47,7 @@ The Mailer-US application is a well-architected, production-ready email campaign
    - **Impact**: Could be used for phishing attacks by redirecting users to malicious sites
    - **Recommendation**: Validate redirect URLs against a whitelist of allowed domains or implement strict URL validation
 
-3. **TLS Validation Disabled in Postal Provider** (High Risk)
-   - **Impact**: Man-in-the-middle attacks possible on Postal HTTP API communications
-   - **Recommendation**: Set `rejectUnauthorized: true` and ensure proper certificate management
+
 
 #### Performance Bottlenecks
 1. **Worker Concurrency Limit of 1** (Medium Risk)
@@ -66,7 +64,7 @@ The Mailer-US application is a well-architected, production-ready email campaign
 1. **Security Hardening**:
    - Migrate JWT storage to HTTP-only cookies with CSRF protection
    - Implement URL validation for click tracking redirects
-   - Enable TLS certificate validation in Postal provider
+
    - Add rate limiting to authentication and sensitive endpoints
    - Review and sanitize error messages to prevent information leakage
 

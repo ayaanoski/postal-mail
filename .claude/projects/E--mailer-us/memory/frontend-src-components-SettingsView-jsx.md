@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**Purpose**: Allows users to configure and manage multiple personal SMTP configurations (Brevo, SparkPost, VPS/Postal, Custom) for use in campaign sending rotations, with testing capabilities and global/server-wide configuration toggle.
+**Purpose**: Allows users to configure and manage multiple personal SMTP configurations (Brevo, SparkPost, Custom) for use in campaign sending rotations, with testing capabilities and global/server-wide configuration toggle.
 
 **Dependencies**:
 - React hooks (useState, useEffect)
